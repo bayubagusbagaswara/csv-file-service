@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="utf-8" />
+    <title>Template Bulanan</title>
+    <style>
+        body { width:210mm; height:297mm; font-family: Helvetica, Arial, sans-serif; font-size:11pt; padding:10px; }
+        table { border-collapse: collapse; }
+        hr { border: none; border-top: 4px solid black; margin-top: -12px; height: 4px; }
+    </style>
+</head>
+<body>
+<div style="width:100%;">
+    <!-- image src relatif; AccountStatementPdfGenerator menyalin logo.png ke baseUri -->
+<!--    <img src="logo.png" style="width:30%; margin-left:-50px;" alt="logo">-->
+</div><br>
+
+<div style="width:100%;">
+    <center><strong>LAPORAN AKUN</strong></center>
+    <center><i style="font-size:10px;margin-top:0px;">ACCOUNT STATEMENT</i></center>
+</div>
+
+<div style="width:100%; margin-top:30px;">
+    <table border="0" style="width:100%;">
+        <tbody>
+        <tr style="font-size:85%;">
+            <td style="width:120px">Nama Investor</td>
+            <td align="center" style="width:6px;">:</td>
+            <td>[CustomerName]</td>
+        </tr>
+        <tr style="font-size:85%;">
+            <td><i>CIF</i></td>
+            <td>:</td>
+            <td>[CIF]</td>
+        </tr>
+        <tr style="height:10px"></tr>
+        <tr style="font-size:85%;">
+            <td>Alamat <br> <i>Address</i> </td>
+            <td>:</td>
+            <td>[Address]</td>
+        </tr>
+        <tr style="height:10px"></tr>
+        <tr style="font-size:85%;">
+            <td>Cabang<br><i>Branch</i></td>
+            <td>:</td>
+            <td>[Branch]</td>
+        </tr>
+        <tr style="height:10px"></tr>
+        <tr style="font-size:85%;">
+            <td>Periode <br> <i>Period</i></td>
+            <td>:</td>
+            <td>[StartDate] until [EndDate]</td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- contoh table dan statement details -->
+<div style="width:700px; margin-top:20px; font-size:80%;">
+    <table border="0" style="width:700px; font-size:90%; border:1px solid black;">
+        <tbody>
+        <tr style="height:50px">
+            <td style="width:120px;"><b>Nama Obligasi</b><br><i>Bond Name</i></td>
+            <td style="width:200px;"><b>Kepemilikan Terakhir ([MataUang])</b><br><i>Last Holding ([Currency])</i></td>
+            <td style="width:120px;"><b>Rekening efek</b><br><i>Securities Account</i></td>
+            <td style="width:120px;"><b>MtM As Per</b><br>[EndDate]</td>
+            <td style="width:200px;"><b>Market Value As Per</b><br>[EndDate]</td>
+        </tr>
+        <tr><td colspan="5"><hr/></td></tr>
+        <tr>
+            <td>[ProductCode]</td>
+            <td>[LastHolding]</td>
+            <td>[PortfolioCode]</td>
+            <td>[MTM]</td>
+            <td>[MTMValue]</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <p style="font-size:80%; margin-top:2px;"><sup><strong>*</strong></sup>Harga MtM diatas adalah harga pasar wajar dari pihak ketiga ...</p>
+</div>
+
+<div style="width:700px; margin-top:20px; font-size:80%;">
+    <table border="0" style="width:700px; font-size:85%; border:1px solid black;">
+        <tbody>
+        <tr>
+            <td align="center" style="width:55px;"><b>Tanggal</b><br><i>Date</i></td>
+            <td align="center" style="width:100px;"><b>Jenis Transaksi</b><br><i>Transaction Type</i></td>
+            <td align="right" style="width:112px;"><b>Nilai Pokok</b><br><i>Face Value</i></td>
+            <td align="right" style="width:112px;"><b>Nilai Transaksi</b><br><i>Transaction Amount</i></td>
+            <td align="right" style="width:90px;"><b>Kupon</b><br><i>Coupon</i></td>
+            <td align="right" style="width:80px;padding-right:10px;"><b>Pajak</b><br><i>Tax</i></td>
+            <td align="right" style="width:160px;"><b>Nilai Yang Dibukukan ([MataUang])</b><br><i>Settlement Amount ([Currency])</i></td>
+        </tr>
+        <tr><td colspan="7"><hr/></td></tr>
+        [StatementDetails]
+        </tbody>
+    </table>
+</div>
+
+<footer style="position:relative; bottom:-50px; width:100%; font-size:80%; display:block;">
+    <p align="center">PT Bank Danamon Indonesia Tbk - Securities Services</p>
+    <p align="center" style="margin-top:-10px;">Menara Bank Danamon ...</p>
+</footer>
+</body>
+</html>
