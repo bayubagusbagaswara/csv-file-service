@@ -43,7 +43,7 @@ public class NcbsRequest {
     private String jsonRequest;
 
     @Enumerated(EnumType.STRING)
-    private MiddlewareService service;
+    private MiddlewareServiceType service;
 
     @Enumerated(EnumType.STRING)
     private FeatureType featureType;
