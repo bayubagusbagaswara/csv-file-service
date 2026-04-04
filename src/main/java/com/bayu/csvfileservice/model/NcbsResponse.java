@@ -37,7 +37,7 @@ public class NcbsResponse {
     private Long entityId;
 
     @Enumerated(EnumType.STRING)
-    private MiddlewareService service;
+    private MiddlewareServiceType service;
 
     @Enumerated(EnumType.STRING)
     private FeatureType featureType;
