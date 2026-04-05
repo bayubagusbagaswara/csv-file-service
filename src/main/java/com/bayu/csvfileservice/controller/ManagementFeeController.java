@@ -1,9 +1,11 @@
 package com.bayu.csvfileservice.controller;
 
 import com.bayu.csvfileservice.dto.ApiResponse;
+import com.bayu.csvfileservice.dto.ApproveDataChangeRequest;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.datachange.DataChangeDto;
 import com.bayu.csvfileservice.dto.managementfee.ManagementFeeBulkRequest;
+import com.bayu.csvfileservice.service.ManagementFeeMapService;
 import com.bayu.csvfileservice.service.ManagementFeeRawService;
 import com.bayu.csvfileservice.util.ClientIpUtil;
 import com.bayu.csvfileservice.util.DataChangeFactory;
@@ -27,6 +29,7 @@ public class ManagementFeeController {
     private static final String MENU_MANAGEMENT_FEE = "Management Fee";
 
     private final ManagementFeeRawService rawService;
+    private final ManagementFeeMapService mapService;
     private final DataChangeFactory dataChangeFactory;
 
     @PostMapping(path = "/upload-raw")
@@ -41,7 +44,15 @@ public class ManagementFeeController {
         );
         ProcessResult result = rawService.createBulk(request, dataChangeDto);
         return buildResponse(result);
-     }
+    }
+
+    @PostMapping(path = "/create/approve")
+    public ResponseEntity<ApiResponse<ProcessResult>> createApprove(@RequestBody ApproveDataChangeRequest request, HttpServletRequest servletRequest) {
+        String clientIp = ClientIpUtil.getClientIp(servletRequest);
+        ProcessResult result = rawService.createApprove(request, clientIp);
+        return buildResponse(result);
+    }
+
 
     // @PostMapping(path = "/mapping")
 
