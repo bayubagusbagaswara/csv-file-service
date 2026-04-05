@@ -296,3 +296,15 @@ public static void setStatementAccountOutputFile(Session session, Date startDate
 }
 
 ```
+
+
+# List Task
+
+1. Upload Data (Bulk) – User upload data Management Fee secara bulk lalu sistem memvalidasinya.
+2. Masuk ke Data Change – Data valid disimpan ke Data Change dengan status PENDING_APPROVAL.
+3. Approval Data Raw – User approve atau reject data raw sebelum diproses lebih lanjut.
+4. Proses Mapping – Sistem melakukan mapping data dari ManagementFeeRaw dan MasterBank.
+5. Approval Data Mapping – User approve atau reject hasil mapping data.
+6. Kirim ke Middleware – User mengirim data yang sudah siap ke Middleware.
+7. Terima Response Middleware – Sistem menerima dan menyimpan response dari Middleware.
+8. Handling Response Status – Sistem menangani response berdasarkan status sukses, saldo tidak cukup, atau failed.
