@@ -32,13 +32,15 @@ public class ManagementFeeRaw extends BaseApproval {
 
     private String investmentManager;
 
+    private String fundCode;
+
     private String debitAccount;
 
     private BigDecimal amount;
 
-    private String creditAccount; // rekening tujuan
+    private String creditAccount;
 
-    private String beneficiaryName; // atas nama
+    private String beneficiaryName;
 
     private String bankName;
 
