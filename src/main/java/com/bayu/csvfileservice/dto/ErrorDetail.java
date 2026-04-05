@@ -17,8 +17,12 @@ public class ErrorDetail {
     private Object value;
     private List<String> messages;
 
-    public static ErrorDetail of(String field, Object value, List<String> messages) {
-        return new ErrorDetail(field, value, messages);
+    public static ErrorDetail of(String field, String value, List<String> messages) {
+        return ErrorDetail.builder()
+                .field(field)
+                .value(value)
+                .messages(messages.stream().distinct().toList())
+                .build();
     }
 
 }
