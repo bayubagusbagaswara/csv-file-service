@@ -63,6 +63,7 @@ public class NcbsResponse {
     private String statusCode;
     private String statusMessage;
 
-    private String ncbsStatus;
+    @Enumerated(EnumType.STRING)
+    private NcbsStatus ncbsStatus;
 
 }
