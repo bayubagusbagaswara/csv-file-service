@@ -660,3 +660,263 @@ private ErrorDetail processSingleRequest(
 ```java
 fromRequestToDto();
 ```
+
+# Base Mapper
+
+```java
+public interface BaseMapper<REQ, DTO, ENTITY> {
+
+    DTO toDto(REQ request);
+
+    ENTITY toEntity(DTO dto);
+
+    DTO toDto(ENTITY entity);
+}
+```
+
+# Mapper Implementation
+
+```java
+@Mapper(componentModel = "spring")
+public interface ManagementFeeMapper extends BaseMapper<
+        ManagementFeeRequest,
+        ManagementFeeDto,
+        ManagementFeeRaw> {
+
+    // kalau perlu custom mapping, tambahkan di sini
+}
+```
+
+# AuditView
+
+```java
+public class AuditView {
+
+    public static class Before {}
+
+    public static class After extends Before {}
+}
+```
+
+# ManagementFeeDto
+
+```java
+@Data
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class ManagementFeeDto {
+
+    // ================= BEFORE & AFTER =================
+    @JsonView(AuditView.Before.class)
+    private String mutualFundName;
+
+    @JsonView(AuditView.Before.class)
+    private String investmentManager;
+
+    @JsonView(AuditView.Before.class)
+    private String fundCode;
+
+    @JsonView(AuditView.Before.class)
+    private String debitAccount;
+
+    @JsonView(AuditView.Before.class)
+    private String amount;
+
+    @JsonView(AuditView.Before.class)
+    private String creditAccount;
+
+    @JsonView(AuditView.Before.class)
+    private String beneficiaryName;
+
+    @JsonView(AuditView.Before.class)
+    private String bankName;
+
+    @JsonView(AuditView.Before.class)
+    private String paymentInstructions;
+
+    @JsonView(AuditView.Before.class)
+    private String paymentType;
+
+    @JsonView(AuditView.Before.class)
+    private String period;
+
+    @JsonView(AuditView.Before.class)
+    private String description;
+
+    @JsonView(AuditView.Before.class)
+    private String bankCode;
+
+    // ================= ONLY AFTER =================
+    @JsonView(AuditView.After.class)
+    private String internalNotes;
+}
+```
+
+# DataChangeHelper
+
+```java
+@Mapper(componentModel = "spring")
+public abstract class DataChangeHelperMapper {
+
+    @Autowired
+    protected ObjectMapper objectMapper;
+
+    private String toJson(Object obj, Class<?> view) {
+        if (obj == null) return null;
+
+        try {
+            return objectMapper
+                    .writerWithView(view)
+                    .writeValueAsString(obj);
+        } catch (Exception e) {
+            throw new JsonSerializeException(
+                    "Failed to serialize payload: " + obj.getClass().getSimpleName(),
+                    e
+            );
+        }
+    }
+
+    public <T> DataChangeDto forAdd(DataChangeDto baseDto, T after) {
+        return baseDto.toBuilder()
+                .jsonDataBefore(null)
+                .jsonDataAfter(toJson(after, AuditView.After.class))
+                .build();
+    }
+
+    public <T> DataChangeDto forEdit(DataChangeDto baseDto, T before, T after) {
+        return baseDto.toBuilder()
+                .jsonDataBefore(toJson(before, AuditView.Before.class))
+                .jsonDataAfter(toJson(after, AuditView.After.class))
+                .build();
+    }
+
+    public <T> DataChangeDto forDelete(DataChangeDto baseDto, T before) {
+        return baseDto.toBuilder()
+                .jsonDataBefore(toJson(before, AuditView.Before.class))
+                .jsonDataAfter(null)
+                .build();
+    }
+}
+```
+
+# BaseAuditService
+
+```java
+@RequiredArgsConstructor
+@Slf4j
+public abstract class BaseAuditService<REQ, DTO, ENTITY> {
+
+    protected final ValidationData validationData;
+    protected final DataChangeHelperMapper auditMapper;
+    protected final DataChangeMapper dataChangeMapper;
+    protected final DataChangeService dataChangeService;
+
+    protected abstract BaseMapper<REQ, DTO, ENTITY> getMapper();
+
+    protected abstract Class<?> getEntityClass();
+
+    protected abstract String getIdentifier(REQ request);
+
+    // ================= CREATE =================
+    protected ErrorDetail processCreate(REQ request, DataChangeDto baseDto) {
+
+        List<String> errors = new ArrayList<>();
+
+        Set<ConstraintViolation<REQ>> violations =
+                validationData.validateObject(request);
+
+        if (!violations.isEmpty()) {
+
+            errors.addAll(
+                    violations.stream()
+                            .map(v -> v.getPropertyPath() + " : " + v.getMessage())
+                            .toList()
+            );
+
+            log.warn("Validation failed {}: {}", getIdentifier(request), errors);
+
+            return ErrorDetail.of("request", getIdentifier(request), errors);
+        }
+
+        try {
+
+            DTO dto = getMapper().toDto(request);
+
+            DataChangeDto auditDto =
+                    auditMapper.forAdd(baseDto, dto);
+
+            DataChange entity =
+                    dataChangeMapper.toEntity(auditDto);
+
+            dataChangeService.createChangeActionAdd(
+                    entity,
+                    getEntityClass()
+            );
+
+        } catch (Exception e) {
+
+            log.error("Error processing {}", getIdentifier(request), e);
+
+            errors.add("Failed to process data");
+
+            return ErrorDetail.of("request", getIdentifier(request), errors);
+        }
+
+        return null;
+    }
+}
+```
+
+# ManagementFeeRawServiceImpl
+
+```java
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class ManagementFeeRawServiceImpl
+        extends BaseAuditService<
+        ManagementFeeRequest,
+        ManagementFeeDto,
+        ManagementFeeRaw>
+        implements ManagementFeeRawService {
+
+    private final ManagementFeeMapper mapper;
+
+    @Override
+    protected BaseMapper<ManagementFeeRequest, ManagementFeeDto, ManagementFeeRaw> getMapper() {
+        return mapper;
+    }
+
+    @Override
+    protected Class<?> getEntityClass() {
+        return ManagementFeeRaw.class;
+    }
+
+    @Override
+    protected String getIdentifier(ManagementFeeRequest request) {
+        return request.getFundCode();
+    }
+
+    // ================= BULK =================
+    @Override
+    public ProcessResult createBulk(
+            ManagementFeeBulkRequest request,
+            DataChangeDto dataChangeDto
+    ) {
+
+        ProcessResult result = new ProcessResult();
+
+        for (ManagementFeeRequest item : request.getItems()) {
+
+            ErrorDetail error = processCreate(item, dataChangeDto);
+
+            if (error != null) {
+                result.addError(error);
+            } else {
+                result.addSuccess();
+            }
+        }
+
+        return result;
+    }
+}
+```
