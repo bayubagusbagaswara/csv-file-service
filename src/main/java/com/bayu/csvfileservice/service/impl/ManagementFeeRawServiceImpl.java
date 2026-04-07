@@ -1,13 +1,12 @@
 package com.bayu.csvfileservice.service.impl;
 
 import com.bayu.csvfileservice.dto.ApproveDataChangeRequest;
+import com.bayu.csvfileservice.dto.DeleteIdRequest;
 import com.bayu.csvfileservice.dto.ErrorDetail;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.datachange.DataChangeDto;
-import com.bayu.csvfileservice.dto.managementfee.ManagementFeeBulkRequest;
-import com.bayu.csvfileservice.dto.managementfee.ManagementFeeDto;
-import com.bayu.csvfileservice.dto.managementfee.ManagementFeeRequest;
-import com.bayu.csvfileservice.dto.managementfee.ViewManagementFeeAfterAdd;
+import com.bayu.csvfileservice.dto.managementfee.*;
+import com.bayu.csvfileservice.exception.DataNotFoundException;
 import com.bayu.csvfileservice.exception.InvalidFormatException;
 import com.bayu.csvfileservice.mapper.DataChangeHelperMapper;
 import com.bayu.csvfileservice.mapper.DataChangeMapper;
@@ -30,10 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -131,6 +127,120 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
         return processResult;
     }
 
+    public ProcessResult deleteById(DeleteIdRequest request, DataChangeDto dataChangeDto) {
+
+        ProcessResult processResult = new ProcessResult();
+
+        try {
+            Long id = request.getId();
+
+            //1. get entity
+            ManagementFeeRaw entity = managementFeeRawRepository.findById(id)
+                    .orElseThrow(() -> new DataNotFoundException("ManagementFeeRaw nor found with id: " + id));
+
+            //2. map to ManagementFeeDto
+            ManagementFeeDto dto = managementFeeMapper.toDto(entity);
+
+            //3. map from dto to ViewManagementFeeAfterDelete
+            ViewManagementFeeBeforeDelete view = managementFeeMapper.fromRequestToViewBeforeDelete(dto);
+
+            //4. map dataChangeDto to data change
+            DataChangeDto dtoAudit = dataChangeHelperMapper.forDelete(dataChangeDto, view);
+
+            //5. map ke entity DataChange
+            DataChange dataChange = dataChangeMapper.toEntity(dtoAudit);
+
+            //6. create delete action
+            dataChangeService.createChangeActionDelete(
+                    dataChange,
+                    ManagementFeeRaw.class
+            );
+
+            processResult.addSuccess();
+        } catch (Exception e) {
+            log.error("Error deleteById id {}", request.getId(), e);
+            processResult.addError(
+                    ErrorDetail.of("id", String.valueOf(request.getId()), List.of(e.getMessage()))
+            );
+        }
+        return processResult;
+    }
+
+    public ProcessResult deleteApprove(ApproveDataChangeRequest request, String clientIp) {
+        ProcessResult processResult = new ProcessResult();
+        LocalDateTime now = LocalDateTime.now();
+        try {
+            Long dataChangeId = request.getDataChangeId();
+
+            // 1. get DataChange + VALIDASI PENDING
+            DataChange dataChange = dataChangeService.getPendingById(dataChangeId);
+
+            Long entityId = dataChange.getEntityId() != null
+                    ? Long.valueOf(dataChange.getEntityId())
+                    : null;
+
+            Optional<ManagementFeeRaw> optional = entityId != null
+                    ? managementFeeRawRepository.findById(entityId)
+                    : Optional.empty();
+
+            // ================= SUCCESS =================
+            if (optional.isPresent()) {
+                ManagementFeeRaw entity = optional.get();
+
+                // set approval ke dataChange
+                setApprovalFieldsToDataChange(
+                        dataChange,
+                        request,
+                        clientIp,
+                        entity.getId(),
+                        now
+                );
+
+                // delete data
+                managementFeeRawRepository.delete(entity);
+
+                // update audit json
+                // todo: setJsonDataBefore tidak perlu ya? karena pada saat pertama sudah di-insert?
+                dataChange.setJsonDataAfter(null);
+                dataChange.setDescription(
+                        "Success dalete management fee with id: " + entity.getId());
+                dataChangeService.setApprovalStatusIsApproved(dataChange);
+                processResult.addSuccess();
+            } else {
+                // ================= NOT FOUND =================
+                setApprovalFieldsToDataChange(
+                        dataChange,
+                        request,
+                        clientIp,
+                        null,
+                        now
+                );
+                dataChangeService.setApprovalStatusIsRejected(
+                        dataChange,
+                        List.of("Management Fee not found")
+                );
+                processResult.addError(
+                        ErrorDetail.of(
+                                "dataChangeId",
+                                String.valueOf(dataChangeId),
+                                List.of("Management Fee not found")
+                        )
+                );
+            }
+        } catch (Exception e) {
+            log.error("Error deleteApprove dataChangeId {}", request.getDataChangeId(), e);
+
+            processResult.addError(
+                    ErrorDetail.of(
+                            "dataChangeId",
+                            String.valueOf(request.getDataChangeId()),
+                            List.of("Failed to approve delete")
+                    )
+            );
+        }
+        return processResult;
+    }
+
     // ======================== PROCESS =========================
     private ErrorDetail processSingleRequest(
             ManagementFeeRequest request,
@@ -159,6 +269,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
         // ================= BUSINESS PROCESS =================
         try {
 
+            //todo: berarti tidak perlu ViewManagementFeeAfterAdd ya? bisa langsung saja ke ManagementFeeDto?
             ViewManagementFeeAfterAdd view = managementFeeMapper.fromRequestToViewAfterAdd(request);
 
             DataChangeDto dto = dataChangeHelperMapper.forAdd(dataChangeDto, view);
