@@ -2,6 +2,7 @@ package com.bayu.csvfileservice.service.impl;
 
 import com.bayu.csvfileservice.exception.DataNotFoundException;
 import com.bayu.csvfileservice.model.DataChange;
+import com.bayu.csvfileservice.model.enumerator.ApprovalStatus;
 import com.bayu.csvfileservice.repository.DataChangeRepository;
 import com.bayu.csvfileservice.service.DataChangeService;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,18 @@ public class DataChangeServiceImpl implements DataChangeService {
     public DataChange getById(Long id) {
         return dataChangeRepository.findById(id)
                 .orElseThrow(() -> new DataNotFoundException(ID_NOT_FOUND + id));
+    }
+
+    @Override
+    public DataChange getPendingById(Long id) {
+        DataChange dataChange = dataChangeRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("DataChange not found"));
+        if (dataChange.getApprovalStatus() != ApprovalStatus.PENDING) {
+            throw new IllegalStateException(
+                    "DataChange with id " + id + " already processed"
+            );
+        }
+        return dataChange;
     }
 
     @Override
@@ -118,4 +131,15 @@ public class DataChangeServiceImpl implements DataChangeService {
     private static String joinStrings(List<String> strings) {
         return String.join(", ", strings);
     }
+
+    // ======================= OPTIONAL HELPER =======================
+
+    public void validatePending(DataChange dataChange) {
+        if (dataChange.getApprovalStatus() != ApprovalStatus.PENDING) {
+            throw new IllegalStateException(
+                    "DataChange with id " + dataChange.getId() + " already processed"
+            );
+        }
+    }
+
 }
