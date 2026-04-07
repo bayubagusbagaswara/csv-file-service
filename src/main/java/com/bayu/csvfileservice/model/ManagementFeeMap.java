@@ -3,19 +3,20 @@ package com.bayu.csvfileservice.model;
 import com.bayu.csvfileservice.model.base.BaseApproval;
 import com.bayu.csvfileservice.model.enumerator.MappingStatus;
 import com.bayu.csvfileservice.model.enumerator.Month;
+import com.bayu.csvfileservice.model.enumerator.TransferMethod;
+import com.bayu.csvfileservice.model.enumerator.TransferScope;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "management_fee_map")
-@Data
+@Getter
+@Setter
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -54,10 +55,23 @@ public class ManagementFeeMap extends BaseApproval {
     private String description;
 
     private String bankCode;
+    private String branchCode;
+
+    private String biCode;
+
+    @Enumerated(EnumType.STRING)
+    private TransferScope transferScope;
+
+    @Enumerated(EnumType.STRING)
+    private TransferMethod transferMethod;
 
     @Enumerated(EnumType.STRING)
     private MappingStatus status;
 
-    private Long ncbsRequestId; // relasi ke request
+    private String referenceId;
+
+    private Integer retryCount;
+
+    private LocalDateTime lastSentDate;
 
 }
