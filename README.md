@@ -308,3 +308,355 @@ public static void setStatementAccountOutputFile(Session session, Date startDate
 6. Kirim ke Middleware – User mengirim data yang sudah siap ke Middleware.
 7. Terima Response Middleware – Sistem menerima dan menyimpan response dari Middleware.
 8. Handling Response Status – Sistem menangani response berdasarkan status sukses, saldo tidak cukup, atau failed.
+
+
+# ViewManagementFeeBeforeDelete
+misal saya ingin saat menjadi string dari json, nama fieldnya akan berubah.
+```java
+@Data
+@Builder
+public class ViewManagementFeeBeforeDelete {
+
+    private String mutualFundName;
+    private String investmentManager;
+    private String fundCode;
+    private String debitAccount;
+    private String amount;
+    private String creditAccount;
+    private String beneficiaryName;
+    private String bankName;
+    private String paymentInstructions;
+    private String paymentType;
+    private String period;
+    private String description;
+    private String bankCode;
+}
+```
+misal contoh dari json menjadi string yang disimpan di jsonBefore atau jsonAfter: "{"namaReksadana": "CapitalMoneyMarket", "managerInvestasi": "PT Capital","fundCode": "A001","rekeningDebet": "12344577"}
+maksudnya nama field berbeda dengan nama field di object
+```json
+{
+  "namaReksadana": "CapitalMoneyMarket",
+  "managerInvestasi": "PT Capital",
+  "fundCode": "A001",
+  "rekeningDebet": "12344577"
+}
+```
+
+# ManagementFeeDto
+```java
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonView;
+import lombok.Data;
+
+@Data
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class ManagementFeeDto {
+
+    // ================= BEFORE & AFTER =================
+    @JsonView(AuditView.Before.class)
+    private String mutualFundName;
+
+    @JsonView(AuditView.Before.class)
+    private String investmentManager;
+
+    @JsonView(AuditView.Before.class)
+    private String fundCode;
+
+    @JsonView(AuditView.Before.class)
+    private String debitAccount;
+
+    @JsonView(AuditView.Before.class)
+    private String amount;
+
+    @JsonView(AuditView.Before.class)
+    private String creditAccount;
+
+    @JsonView(AuditView.Before.class)
+    private String beneficiaryName;
+
+    @JsonView(AuditView.Before.class)
+    private String bankName;
+
+    @JsonView(AuditView.Before.class)
+    private String paymentInstructions;
+
+    @JsonView(AuditView.Before.class)
+    private String paymentType;
+
+    @JsonView(AuditView.Before.class)
+    private String period;
+
+    @JsonView(AuditView.Before.class)
+    private String description;
+
+    @JsonView(AuditView.Before.class)
+    private String bankCode;
+
+    // ================= ONLY AFTER =================
+    @JsonView(AuditView.After.class)
+    private String internalNotes;
+}
+```
+
+# DataChangeHelper
+
+```java
+@Mapper(componentModel = "spring")
+public abstract class DataChangeHelperMapper {
+
+    @Autowired
+    protected ObjectMapper objectMapper;
+
+    // ================= CORE =================
+
+    private String toJson(Object obj, Class<?> view) {
+        if (obj == null) return null;
+
+        try {
+            return objectMapper
+                    .writerWithView(view)
+                    .writeValueAsString(obj);
+        } catch (Exception e) {
+            throw new JsonSerializeException(
+                    "Failed to serialize payload: " + obj.getClass().getSimpleName(),
+                    e
+            );
+        }
+    }
+
+    // ================= USE CASE =================
+
+    public <T> DataChangeDto forAdd(DataChangeDto baseDto, T after) {
+        return baseDto.toBuilder()
+                .jsonDataBefore(null)
+                .jsonDataAfter(toJson(after, AuditView.After.class))
+                .build();
+    }
+
+    public <T> DataChangeDto forEdit(DataChangeDto baseDto, T before, T after) {
+        return baseDto.toBuilder()
+                .jsonDataBefore(toJson(before, AuditView.Before.class))
+                .jsonDataAfter(toJson(after, AuditView.After.class))
+                .build();
+    }
+
+    public <T> DataChangeDto forDelete(DataChangeDto baseDto, T before) {
+        return baseDto.toBuilder()
+                .jsonDataBefore(toJson(before, AuditView.Before.class))
+                .jsonDataAfter(null)
+                .build();
+    }
+}
+```
+
+# Delete By Id
+
+```java
+@Override
+public ProcessResult deleteById(DeleteIdRequest request, DataChangeDto dataChangeDto) {
+
+    ProcessResult processResult = new ProcessResult();
+
+    try {
+
+        Long id = request.getId();
+
+        // 1. get entity
+        ManagementFeeRaw entity = managementFeeRawRepository.findById(id)
+                .orElseThrow(() ->
+                        new DataNotFoundException("ManagementFeeRaw not found with id: " + id)
+                );
+
+        // 2. map ke DTO
+        ManagementFeeDto dto = managementFeeMapper.toDto(entity);
+
+        // 3. build audit (DELETE)
+        DataChangeDto dtoAudit = dataChangeHelperMapper.forDelete(
+                dataChangeDto,
+                dto
+        );
+
+        // 4. map ke entity DataChange
+        DataChange dataChange = dataChangeMapper.toEntity(dtoAudit);
+
+        // 5. create delete action
+        dataChangeService.createChangeActionDelete(
+                dataChange,
+                ManagementFeeRaw.class
+        );
+
+        processResult.addSuccess();
+
+    } catch (Exception e) {
+
+        log.error("Error deleteById id {}", request.getId(), e);
+
+        processResult.addError(
+                ErrorDetail.of(
+                        "id",
+                        String.valueOf(request.getId()),
+                        List.of(e.getMessage())
+                )
+        );
+    }
+
+    return processResult;
+}
+```
+
+# Delete Approve
+```java
+@Override
+public ProcessResult deleteApprove(ApproveDataChangeRequest request, String clientIp) {
+
+    ProcessResult processResult = new ProcessResult();
+    LocalDateTime now = LocalDateTime.now();
+
+    try {
+
+        Long dataChangeId = request.getDataChangeId();
+
+        // 1. get DataChange + VALIDASI PENDING
+        DataChange dataChange = dataChangeService.getPendingById(dataChangeId);
+
+        Long entityId = dataChange.getEntityId() != null
+                ? Long.valueOf(dataChange.getEntityId())
+                : null;
+
+        if (entityId == null) {
+            throw new IllegalStateException("EntityId is null for delete operation");
+        }
+
+        Optional<ManagementFeeRaw> optional =
+                managementFeeRawRepository.findById(entityId);
+
+        // ================= SUCCESS =================
+        if (optional.isPresent()) {
+
+            ManagementFeeRaw entity = optional.get();
+
+            // set approval
+            setApprovalFieldsToDataChange(
+                    dataChange,
+                    request,
+                    clientIp,
+                    entity.getId(),
+                    now
+            );
+
+            // delete
+            managementFeeRawRepository.delete(entity);
+
+            // audit update
+            dataChange.setJsonDataAfter(null);
+            dataChange.setDescription(
+                    "Success delete management fee with id: " + entity.getId()
+            );
+
+            dataChangeService.setApprovalStatusIsApproved(dataChange);
+
+            processResult.addSuccess();
+
+        } else {
+
+            // ================= NOT FOUND =================
+            setApprovalFieldsToDataChange(
+                    dataChange,
+                    request,
+                    clientIp,
+                    null,
+                    now
+            );
+
+            dataChangeService.setApprovalStatusIsRejected(
+                    dataChange,
+                    List.of("Management Fee not found")
+            );
+
+            processResult.addError(
+                    ErrorDetail.of(
+                            "dataChangeId",
+                            String.valueOf(dataChangeId),
+                            List.of("Management Fee not found")
+                    )
+            );
+        }
+
+    } catch (Exception e) {
+
+        log.error("Error deleteApprove dataChangeId {}", request.getDataChangeId(), e);
+
+        processResult.addError(
+                ErrorDetail.of(
+                        "dataChangeId",
+                        String.valueOf(request.getDataChangeId()),
+                        List.of("Failed to approve delete")
+                )
+        );
+    }
+
+    return processResult;
+}
+```
+
+# Process Single Request
+
+```java
+private ErrorDetail processSingleRequest(
+        ManagementFeeRequest request,
+        DataChangeDto dataChangeDto
+) {
+
+    List<String> errors = new ArrayList<>();
+
+    // ================= VALIDATION =================
+    Set<ConstraintViolation<ManagementFeeRequest>> violations =
+            validationData.validateObject(request);
+
+    if (!violations.isEmpty()) {
+
+        errors.addAll(
+                violations.stream()
+                        .map(v -> v.getPropertyPath() + " : " + v.getMessage())
+                        .toList()
+        );
+
+        log.warn("Validation failed for fundCode {}: {}", request.getFundCode(), errors);
+
+        return buildError(request, errors);
+    }
+
+    // ================= BUSINESS PROCESS =================
+    try {
+
+        // 🔥 langsung ke DTO
+        ManagementFeeDto dtoData =
+                managementFeeMapper.fromRequestToDto(request);
+
+        // 🔥 pakai JsonView (After)
+        DataChangeDto dto =
+                dataChangeHelperMapper.forAdd(dataChangeDto, dtoData);
+
+        DataChange entity = dataChangeMapper.toEntity(dto);
+
+        dataChangeService.createChangeActionAdd(entity, ManagementFeeRaw.class);
+
+    } catch (Exception e) {
+
+        log.error("Unexpected error for fundCode {}", request.getFundCode(), e);
+
+        errors.add("Failed to process data");
+
+        return buildError(request, errors);
+    }
+
+    return null; // success
+}
+```
+
+# Method Mapping
+
+```java
+fromRequestToDto();
+```
