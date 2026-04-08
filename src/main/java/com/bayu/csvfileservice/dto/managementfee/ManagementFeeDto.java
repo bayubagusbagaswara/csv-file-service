@@ -14,55 +14,87 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ManagementFeeDto {
 
-    @JsonView(JsonViews.Query.class)  // Hanya tampil di Query
+    // Hanya tampil di Query, Edit, dan Delete (TIDAK tampil di Add)
+    @JsonView({JsonViews.Query.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private Long id;
 
-    @JsonView(JsonViews.Query.class)  // Hanya tampil di Query
+    // Hanya tampil di Query, Edit, dan Delete (TIDAK tampil di Add)
+    @JsonView({JsonViews.Query.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String month;
 
-    @JsonView(JsonViews.Query.class)  // Hanya tampil di Query
+    // Hanya tampil di Query, Edit, dan Delete (TIDAK tampil di Add)
+    @JsonView({JsonViews.Query.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private Integer year;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})  // Tampil di kedua view
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     @JsonProperty("namaReksadana")
     private String mutualFundName;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String investmentManager;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String fundCode;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String debitAccount;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String amount;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String creditAccount;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String beneficiaryName;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String bankName;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String paymentInstructions;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String paymentType;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String period;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String description;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String bankCode;
 
-    @JsonView({JsonViews.Audit.class, JsonViews.Query.class})
+    // Tampil di semua view
+    @JsonView({JsonViews.Query.class, JsonViews.Audit.class,
+            JsonViews.AuditForAdd.class, JsonViews.AuditForEdit.class, JsonViews.AuditForDelete.class})
     private String referenceCombination;
+
 }
