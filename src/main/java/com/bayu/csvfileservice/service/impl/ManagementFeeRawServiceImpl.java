@@ -144,10 +144,9 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
         return managementFeeRawRepository.findAll();
     }
 
+    @Override
     public ProcessResult deleteById(DeleteIdRequest request, DataChangeDto dataChangeDto) {
-
         ProcessResult processResult = new ProcessResult();
-
         try {
             Long id = request.getId();
 
@@ -157,6 +156,8 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
 
             //2. map to ManagementFeeDto
             ManagementFeeDto dto = managementFeeMapper.fromEntityToDto(entity);
+
+            log.info("id dto: {}", dto.getId());
 
             //4. map dataChangeDto to data change
             DataChangeDto dtoAudit = dataChangeHelperMapper.forDelete(dataChangeDto, dto);
@@ -180,6 +181,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
         return processResult;
     }
 
+    @Override
     public ProcessResult deleteApprove(ApproveDataChangeRequest request, String clientIp) {
         ProcessResult processResult = new ProcessResult();
         LocalDateTime now = LocalDateTime.now();
