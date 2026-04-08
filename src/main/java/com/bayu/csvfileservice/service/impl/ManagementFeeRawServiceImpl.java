@@ -36,6 +36,8 @@ import java.util.*;
 @Slf4j
 public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
 
+    private static final String DATA_CHANGE_ID_FIELD = "dataChangeId";
+
     private final ManagementFeeRawRepository managementFeeRawRepository;
     private final ValidationData validationData;
     private final DataChangeMapper dataChangeMapper;
@@ -70,18 +72,27 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
             // Parse JSON
             ManagementFeeDto afterPayload = jsonHelper.fromJson(dataChange.getJsonDataAfter(), ManagementFeeDto.class);
 
-            // Parse Period
+            // ================= CHECK UNIQUE DATA ====================
             YearMonth ym = parsePeriod(afterPayload.getPeriod());
             Month month = Month.valueOf(ym.getMonth().name());
             Integer year = ym.getYear();
-
-
-            // Delete Existing
-            managementFeeRawRepository.deleteByFundCodeAndMonthAndYear(
-                    afterPayload.getFundCode(),
-                    month,
-                    year
-            );
+            if (managementFeeRawRepository.existsByFundCodeAndMonthAndYear(afterPayload.getFundCode(), month, year)) {
+                List<String> errors = new ArrayList<>();
+                errors.add(String.format("Data already exists for the same fund %s, month %s, year %d",
+                        afterPayload.getFundCode(), month.getLabel(), year));
+                processResult.addError(
+                        ErrorDetail.of(
+                                DATA_CHANGE_ID_FIELD,
+                                String.valueOf(dataChange.getId()),
+                                errors
+                        )
+                );
+                setApprovalFieldsToDataChange(dataChange, request, clientIp, null, now);
+                dataChange.setDescription(String.format("DataChange recorded as REJECTED for duplicate fundCode %s, month %s, year %d",
+                        afterPayload.getFundCode(), month.getLabel(), year));
+                dataChangeService.setApprovalStatusIsRejected(dataChange, errors);
+                return processResult;
+            }
 
             // Build Entity
             ManagementFeeRaw managementFeeRaw = ManagementFeeRaw.builder()
@@ -100,6 +111,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                     .period(afterPayload.getPeriod())
                     .description(afterPayload.getDescription())
                     .bankCode(afterPayload.getBankCode())
+                    .referenceCombination(afterPayload.getReferenceCombination())
                     .build();
 
             // Set Approval
@@ -118,13 +130,18 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
             log.error("Error approve management fee for dataChangeId {}", request.getDataChangeId(), e);
             processResult.addError(
                     ErrorDetail.of(
-                            "dataChangeId",
+                            DATA_CHANGE_ID_FIELD,
                             String.valueOf(request.getDataChangeId()),
                             List.of("Failed to approve data")
                     )
             );
         }
         return processResult;
+    }
+
+    @Override
+    public List<ManagementFeeRaw> getAll() {
+        return managementFeeRawRepository.findAll();
     }
 
     public ProcessResult deleteById(DeleteIdRequest request, DataChangeDto dataChangeDto) {
@@ -139,13 +156,10 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                     .orElseThrow(() -> new DataNotFoundException("ManagementFeeRaw nor found with id: " + id));
 
             //2. map to ManagementFeeDto
-            ManagementFeeDto dto = managementFeeMapper.toDto(entity);
-
-            //3. map from dto to ViewManagementFeeAfterDelete
-            ViewManagementFeeBeforeDelete view = managementFeeMapper.fromRequestToViewBeforeDelete(dto);
+            ManagementFeeDto dto = managementFeeMapper.fromEntityToDto(entity);
 
             //4. map dataChangeDto to data change
-            DataChangeDto dtoAudit = dataChangeHelperMapper.forDelete(dataChangeDto, view);
+            DataChangeDto dtoAudit = dataChangeHelperMapper.forDelete(dataChangeDto, dto);
 
             //5. map ke entity DataChange
             DataChange dataChange = dataChangeMapper.toEntity(dtoAudit);
@@ -200,10 +214,8 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                 managementFeeRawRepository.delete(entity);
 
                 // update audit json
-                // todo: setJsonDataBefore tidak perlu ya? karena pada saat pertama sudah di-insert?
                 dataChange.setJsonDataAfter(null);
-                dataChange.setDescription(
-                        "Success dalete management fee with id: " + entity.getId());
+                dataChange.setDescription("Success delete management fee with id: " + entity.getId());
                 dataChangeService.setApprovalStatusIsApproved(dataChange);
                 processResult.addSuccess();
             } else {
@@ -221,7 +233,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                 );
                 processResult.addError(
                         ErrorDetail.of(
-                                "dataChangeId",
+                                DATA_CHANGE_ID_FIELD,
                                 String.valueOf(dataChangeId),
                                 List.of("Management Fee not found")
                         )
@@ -250,29 +262,37 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
         List<String> errors = new ArrayList<>();
 
         // ================= VALIDATION =================
-        Set<ConstraintViolation<ManagementFeeRequest>> violations =
-                validationData.validateObject(request);
-
+        Set<ConstraintViolation<ManagementFeeRequest>> violations = validationData.validateObject(request);
         if (!violations.isEmpty()) {
-
             errors.addAll(
                     violations.stream()
                             .map(v -> v.getPropertyPath() + " : " + v.getMessage())
                             .toList()
             );
-
             log.warn("Validation failed for fundCode {}: {}", request.getFundCode(), errors);
+            return buildError(request, errors);
+        }
 
+        // ================= CHECK UNIQUE DATA ====================
+        YearMonth ym = parsePeriod(request.getPeriod());
+        Month month = Month.valueOf(ym.getMonth().name());
+        Integer year = ym.getYear();
+
+        if (managementFeeRawRepository.existsByFundCodeAndMonthAndYear(request.getFundCode(), month, year)) {
+            errors.add(String.format("Data already exists for the same fundCode %s, month %s, year %d",
+                    request.getFundCode(), month.getLabel(), year));
+            DataChange dataChange = dataChangeMapper.toEntity(dataChangeDto);
+            dataChange.setDescription(String.format("DataChange recorded as REJECTED for duplicate fundCode %s, month %s, year %d",
+                    request.getFundCode(), month.getLabel(), year));
+            dataChangeService.setApprovalStatusIsRejected(dataChange, errors);
             return buildError(request, errors);
         }
 
         // ================= BUSINESS PROCESS =================
         try {
+            ManagementFeeDto feeDto = managementFeeMapper.fromRequestToDto(request);
 
-            //todo: berarti tidak perlu ViewManagementFeeAfterAdd ya? bisa langsung saja ke ManagementFeeDto?
-            ViewManagementFeeAfterAdd view = managementFeeMapper.fromRequestToViewAfterAdd(request);
-
-            DataChangeDto dto = dataChangeHelperMapper.forAdd(dataChangeDto, view);
+            DataChangeDto dto = dataChangeHelperMapper.forAdd(dataChangeDto, feeDto);
 
             DataChange entity = dataChangeMapper.toEntity(dto);
 
