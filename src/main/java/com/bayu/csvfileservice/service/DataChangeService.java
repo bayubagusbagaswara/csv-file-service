@@ -8,6 +8,8 @@ public interface DataChangeService {
 
     DataChange getById(Long id);
 
+    List<DataChange> getAll();
+
     DataChange getPendingById(Long id);
 
     void setApprovalStatusIsRejected(DataChange dataChange, List<String> messages);
