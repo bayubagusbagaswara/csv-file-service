@@ -1,5 +1,6 @@
 package com.bayu.csvfileservice.model.enumerator;
 
+import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 
 @Getter
@@ -22,6 +23,11 @@ public enum Month {
 
     Month(String label) {
         this.label = label;
+    }
+
+    @JsonValue  // ← Tambahkan ini! Jackson akan pakai label untuk serialisasi
+    public String getLabel() {
+        return label;
     }
 
     public static Month fromLabel(String label) {
