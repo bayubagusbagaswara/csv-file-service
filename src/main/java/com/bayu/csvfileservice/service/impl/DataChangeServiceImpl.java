@@ -32,6 +32,11 @@ public class DataChangeServiceImpl implements DataChangeService {
     }
 
     @Override
+    public List<DataChange> getAll() {
+        return dataChangeRepository.findAll();
+    }
+
+    @Override
     public DataChange getPendingById(Long id) {
         DataChange dataChange = dataChangeRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("DataChange not found"));
