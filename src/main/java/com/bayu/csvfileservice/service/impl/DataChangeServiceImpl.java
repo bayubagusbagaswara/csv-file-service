@@ -88,7 +88,6 @@ public class DataChangeServiceImpl implements DataChangeService {
         dataChange.setApproveDate(null);
 
         dataChange.setAction(ADD);
-        dataChange.setEntityId("");
         dataChange.setEntityName(clazz.getName());
         dataChange.setInputDate(Optional.ofNullable(dataChange.getInputDate()).orElse(LocalDateTime.now()));
         dataChange.setDescription("");
@@ -107,7 +106,6 @@ public class DataChangeServiceImpl implements DataChangeService {
         dataChange.setApproveDate(null);
 
         dataChange.setAction(EDIT);
-        dataChange.setEntityId("");
         dataChange.setEntityName(clazz.getName());
         dataChange.setInputDate(Optional.ofNullable(dataChange.getInputDate()).orElse(LocalDateTime.now()));
         dataChange.setDescription("");
@@ -124,7 +122,6 @@ public class DataChangeServiceImpl implements DataChangeService {
         dataChange.setApproveDate(null);
 
         dataChange.setAction(DELETE);
-        dataChange.setEntityId("");
         dataChange.setEntityName(clazz.getName());
         dataChange.setInputDate(Optional.ofNullable(dataChange.getInputDate()).orElse(LocalDateTime.now()));
         dataChange.setDescription("");
