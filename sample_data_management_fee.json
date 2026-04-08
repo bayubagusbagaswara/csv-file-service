@@ -1,0 +1,62 @@
+[
+  {
+    "mutualFundName": "REKSA DANA ALPHA DANA EKUITAS",
+    "investmentManager": "PT ALPHA ASET MANAJEMEN",
+    "fundCode": "21PADE",
+    "debitAccount": "3642989820",
+    "amount": "10.059.605,96",
+    "creditAccount": "0057703466",
+    "beneficiaryName": "PT ALPHA ASET MANAJEMEN",
+    "bankName": "BANK SINARMAS",
+    "paymentInstructions": "SETIAP TANGGAP 02",
+    "paymentType": "MI FEE",
+    "period": "Nov-25",
+    "description": "MGT FEE 21PADE NOV 2025",
+    "bankCode": "1530016"
+  },
+  {
+    "mutualFundName": "REKSA DANA ALPHA PASAR UANG",
+    "investmentManager": "PT ALPHA ASET MANAJEMEN",
+    "fundCode": "25PAPU",
+    "debitAccount": "3652618723",
+    "amount": "4.703.913,64",
+    "creditAccount": "0057703466",
+    "beneficiaryName": "PT ALPHA ASET MANAJEMEN",
+    "bankName": "BANK SINARMAS",
+    "paymentInstructions": "SETIAP TANGGAL 02",
+    "paymentType": "MI FEE",
+    "period": "Nov-25",
+    "description": "MGT FEE 25PAPU NOV 2025",
+    "bankCode": "1530016"
+  },
+  {
+    "mutualFundName": "KPD PT Pacific Life Insurance - Forter",
+    "investmentManager": "PT. Foster Asset Management",
+    "fundCode": "15PCLI",
+    "debitAccount": "3626591402",
+    "amount": "2.763.602,00",
+    "creditAccount": "800141698900",
+    "beneficiaryName": "PT. PACIFIC LIFE INSURANCE",
+    "bankName": "BANK CIMB NIAGA",
+    "paymentInstructions": "PPH 23 MI FEE (MAXIMAL TANGGAL 5)",
+    "paymentType": "PPH 23 MI FEE",
+    "period": "Nov-25",
+    "description": "PPH MI FEE 15PCLI NOV 2025",
+    "bankCode": "0220026"
+  },
+  {
+    "mutualFundName": "RD Sinarmas Syariah Unggulan",
+    "investmentManager": "PT. Sinarmas Syariah Unggulan",
+    "fundCode": "21SMUN",
+    "debitAccount": "3580418923",
+    "amount": "248.188,77",
+    "creditAccount": "0022688887",
+    "beneficiaryName": "PT SINARMAS ASSET MANAGEMENT",
+    "bankName": "BANK SINARMAS",
+    "paymentInstructions": "Instruksi MI",
+    "paymentType": "SUB FEE",
+    "period": "Nov-25",
+    "description": "SUB FEE 21SMUN NOV 2025",
+    "bankCode": "1530016"
+  }
+]
