@@ -54,4 +54,6 @@ public class ManagementFeeRaw extends BaseApproval {
 
     private String bankCode;
 
+    private String referenceCombination;
+
 }
