@@ -2,15 +2,14 @@ package com.bayu.csvfileservice.mapper;
 
 import com.bayu.csvfileservice.dto.datachange.DataChangeDto;
 import com.bayu.csvfileservice.exception.JsonSerializeException;
+import com.bayu.csvfileservice.util.JsonViews;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import org.mapstruct.Mapper;
 
 @Mapper(componentModel = "spring")
-@RequiredArgsConstructor
 public abstract class DataChangeHelperMapper {
 
-    protected ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public <T> DataChangeDto toAuditDto(
             DataChangeDto baseDto,
@@ -19,11 +18,15 @@ public abstract class DataChangeHelperMapper {
     ) {
         try {
             String jsonBefore = before != null
-                    ? objectMapper.writeValueAsString(before)
+                    ? objectMapper
+                    .writerWithView(JsonViews.Audit.class)
+                    .writeValueAsString(before)
                     : null;
 
             String jsonAfter = after != null
-                    ? objectMapper.writeValueAsString(after)
+                    ? objectMapper
+                    .writerWithView(JsonViews.Audit.class)
+                    .writeValueAsString(after)
                     : null;
 
             return baseDto.toBuilder()
