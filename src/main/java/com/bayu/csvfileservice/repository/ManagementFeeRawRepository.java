@@ -15,4 +15,7 @@ public interface ManagementFeeRawRepository extends JpaRepository<ManagementFeeR
     );
 
     List<ManagementFeeRaw> findAllByMonthAndYear(Month month, Integer year);
+
+    boolean existsByFundCodeAndMonthAndYear(String fundCode, Month month, Integer year);
+
 }
