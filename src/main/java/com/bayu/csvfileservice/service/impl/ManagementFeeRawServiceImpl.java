@@ -24,6 +24,7 @@ import jakarta.validation.ConstraintViolation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -47,12 +48,13 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
     private final JsonHelper jsonHelper;
 
     @Override
+    @Transactional
     public ProcessResult createBulk(ManagementFeeBulkRequest request, DataChangeDto dataChangeDto) {
         ProcessResult processResult = new ProcessResult();
         for (ManagementFeeRequest item : request.getItems()) {
             ErrorDetail errorDetail = processSingleRequest(item, dataChangeDto);
             if (errorDetail != null) {
-                processResult.addError(errorDetail); // didalam method addError sudah ada totalFailed++
+                processResult.addError(errorDetail);
             } else {
                 processResult.addSuccess();
             }
@@ -61,22 +63,25 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
     }
 
     @Override
+    @Transactional
     public ProcessResult createApprove(ApproveDataChangeRequest request, String clientIp) {
         LocalDateTime now = LocalDateTime.now();
         ProcessResult processResult = new ProcessResult();
         try {
+            // Get Data Change - pastikan status PENDING
+            DataChange dataChange = dataChangeService.getPendingById(request.getDataChangeId());
 
-            // Get Data Change
-            DataChange dataChange = dataChangeService.getById(request.getDataChangeId());
-
-            // Parse JSON
+            // Parse JSON After - Untuk ADD operation, jsonAfter TIDAK mengandung id, month, year
             ManagementFeeDto afterPayload = jsonHelper.fromJson(dataChange.getJsonDataAfter(), ManagementFeeDto.class);
 
-            // ================= CHECK UNIQUE DATA ====================
+            // Extract month & year dari period (karena id, month, year tidak ada di jsonAfter)
             YearMonth ym = parsePeriod(afterPayload.getPeriod());
             Month month = Month.valueOf(ym.getMonth().name());
             Integer year = ym.getYear();
-            if (managementFeeRawRepository.existsByFundCodeAndMonthAndYear(afterPayload.getFundCode(), month, year)) {
+
+            // Check unique data
+            if (managementFeeRawRepository.existsByFundCodeAndMonthAndYear(
+                    afterPayload.getFundCode(), month, year)) {
                 List<String> errors = new ArrayList<>();
                 errors.add(String.format("Data already exists for the same fund %s, month %s, year %d",
                         afterPayload.getFundCode(), month.getLabel(), year));
@@ -114,25 +119,28 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                     .referenceCombination(afterPayload.getReferenceCombination())
                     .build();
 
-            // Set Approval
+            // Set Approval fields ke entity
             setApprovalFields(managementFeeRaw, dataChange, request, clientIp, now);
             managementFeeRawRepository.save(managementFeeRaw);
 
-            // Update Data Change
+            // Update Data Change dengan ID yang sudah dibuat
             setApprovalFieldsToDataChange(dataChange, request, clientIp, managementFeeRaw.getId(), now);
 
-            dataChange.setJsonDataAfter(jsonHelper.toJson(managementFeeMapper.toDto(managementFeeRaw)));
+            // UPDATE: Simpan DTO lengkap (termasuk id, month, year) di jsonAfter setelah approve
+            ManagementFeeDto completeDto = managementFeeMapper.toDto(managementFeeRaw);
+            dataChange.setJsonDataAfter(jsonHelper.toJson(completeDto));
 
             dataChange.setDescription("Success approve insert of management fee with id: " + managementFeeRaw.getId());
             dataChangeService.setApprovalStatusIsApproved(dataChange);
             processResult.addSuccess();
+
         } catch (Exception e) {
             log.error("Error approve management fee for dataChangeId {}", request.getDataChangeId(), e);
             processResult.addError(
                     ErrorDetail.of(
                             DATA_CHANGE_ID_FIELD,
                             String.valueOf(request.getDataChangeId()),
-                            List.of("Failed to approve data")
+                            List.of("Failed to approve data: " + e.getMessage())
                     )
             );
         }
@@ -145,33 +153,37 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
     }
 
     @Override
+    @Transactional
     public ProcessResult deleteById(DeleteIdRequest request, DataChangeDto dataChangeDto) {
         ProcessResult processResult = new ProcessResult();
         try {
             Long id = request.getId();
 
-            //1. get entity
+            // 1. Get entity
             ManagementFeeRaw entity = managementFeeRawRepository.findById(id)
-                    .orElseThrow(() -> new DataNotFoundException("ManagementFeeRaw nor found with id: " + id));
+                    .orElseThrow(() -> new DataNotFoundException("ManagementFeeRaw not found with id: " + id));
 
-            //2. map to ManagementFeeDto
+            // 2. Map to ManagementFeeDto
             ManagementFeeDto dto = managementFeeMapper.fromEntityToDto(entity);
 
-            log.info("id dto: {}", dto.getId());
-
-            //4. map dataChangeDto to data change
+            // 3. Untuk DELETE: jsonBefore berisi id, month, year (menggunakan AuditForDelete)
             DataChangeDto dtoAudit = dataChangeHelperMapper.forDelete(dataChangeDto, dto);
 
-            //5. map ke entity DataChange
+            // 4. Map ke entity DataChange
             DataChange dataChange = dataChangeMapper.toEntity(dtoAudit);
 
-            //6. create delete action
-            dataChangeService.createChangeActionDelete(
-                    dataChange,
-                    ManagementFeeRaw.class
-            );
+            // 5. Simpan entityId yang akan dihapus
+            dataChange.setEntityId(String.valueOf(entity.getId()));
+            //todo: kenapa entityId disini nilainya string kosong ya jika sudah disimpan ke database? padahal log nya ada id nya
+            log.info("id: {}", id);
+
+            log.info("Datachange: {}", dataChange);
+
+            // 6. Create delete action
+            dataChangeService.createChangeActionDelete(dataChange, ManagementFeeRaw.class);
 
             processResult.addSuccess();
+
         } catch (Exception e) {
             log.error("Error deleteById id {}", request.getId(), e);
             processResult.addError(
@@ -182,14 +194,17 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
     }
 
     @Override
+    @Transactional
     public ProcessResult deleteApprove(ApproveDataChangeRequest request, String clientIp) {
         ProcessResult processResult = new ProcessResult();
         LocalDateTime now = LocalDateTime.now();
         try {
             Long dataChangeId = request.getDataChangeId();
 
-            // 1. get DataChange + VALIDASI PENDING
+            // 1. Get DataChange + VALIDASI PENDING
             DataChange dataChange = dataChangeService.getPendingById(dataChangeId);
+
+            log.info("datachange delete approve: {}", dataChange);
 
             Long entityId = dataChange.getEntityId() != null
                     ? Long.valueOf(dataChange.getEntityId())
@@ -199,36 +214,24 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                     ? managementFeeRawRepository.findById(entityId)
                     : Optional.empty();
 
-            // ================= SUCCESS =================
             if (optional.isPresent()) {
                 ManagementFeeRaw entity = optional.get();
 
-                // set approval ke dataChange
-                setApprovalFieldsToDataChange(
-                        dataChange,
-                        request,
-                        clientIp,
-                        entity.getId(),
-                        now
-                );
+                // Set approval ke dataChange
+                setApprovalFieldsToDataChange(dataChange, request, clientIp, entity.getId(), now);
 
-                // delete data
+                // Delete data
                 managementFeeRawRepository.delete(entity);
 
-                // update audit json
+                // Update audit json: jsonAfter tetap null untuk DELETE operation
                 dataChange.setJsonDataAfter(null);
                 dataChange.setDescription("Success delete management fee with id: " + entity.getId());
                 dataChangeService.setApprovalStatusIsApproved(dataChange);
                 processResult.addSuccess();
+
             } else {
-                // ================= NOT FOUND =================
-                setApprovalFieldsToDataChange(
-                        dataChange,
-                        request,
-                        clientIp,
-                        null,
-                        now
-                );
+                // Data not found
+                setApprovalFieldsToDataChange(dataChange, request, clientIp, null, now);
                 dataChangeService.setApprovalStatusIsRejected(
                         dataChange,
                         List.of("Management Fee not found")
@@ -241,14 +244,14 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                         )
                 );
             }
+
         } catch (Exception e) {
             log.error("Error deleteApprove dataChangeId {}", request.getDataChangeId(), e);
-
             processResult.addError(
                     ErrorDetail.of(
                             "dataChangeId",
                             String.valueOf(request.getDataChangeId()),
-                            List.of("Failed to approve delete")
+                            List.of("Failed to approve delete: " + e.getMessage())
                     )
             );
         }
@@ -256,14 +259,10 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
     }
 
     // ======================== PROCESS =========================
-    private ErrorDetail processSingleRequest(
-            ManagementFeeRequest request,
-            DataChangeDto dataChangeDto
-    ) {
-
+    private ErrorDetail processSingleRequest(ManagementFeeRequest request, DataChangeDto dataChangeDto) {
         List<String> errors = new ArrayList<>();
 
-        // ================= VALIDATION =================
+        // Validation
         Set<ConstraintViolation<ManagementFeeRequest>> violations = validationData.validateObject(request);
         if (!violations.isEmpty()) {
             errors.addAll(
@@ -275,7 +274,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
             return buildError(request, errors);
         }
 
-        // ================= CHECK UNIQUE DATA ====================
+        // Check unique data
         YearMonth ym = parsePeriod(request.getPeriod());
         Month month = Month.valueOf(ym.getMonth().name());
         Integer year = ym.getYear();
@@ -283,30 +282,34 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
         if (managementFeeRawRepository.existsByFundCodeAndMonthAndYear(request.getFundCode(), month, year)) {
             errors.add(String.format("Data already exists for the same fundCode %s, month %s, year %d",
                     request.getFundCode(), month.getLabel(), year));
-            DataChange dataChange = dataChangeMapper.toEntity(dataChangeDto);
-            dataChange.setDescription(String.format("DataChange recorded as REJECTED for duplicate fundCode %s, month %s, year %d",
+
+            // Create dataChange with REJECTED status
+            ManagementFeeDto feeDto = managementFeeMapper.fromRequestToDto(request);
+            DataChangeDto dto = dataChangeHelperMapper.forAdd(dataChangeDto, feeDto);
+            DataChange entity = dataChangeMapper.toEntity(dto);
+            entity.setDescription(String.format("DataChange recorded as REJECTED for duplicate fundCode %s, month %s, year %d",
                     request.getFundCode(), month.getLabel(), year));
-            dataChangeService.setApprovalStatusIsRejected(dataChange, errors);
+            dataChangeService.setApprovalStatusIsRejected(entity, errors);
             return buildError(request, errors);
         }
 
-        // ================= BUSINESS PROCESS =================
+        // Business process
         try {
             ManagementFeeDto feeDto = managementFeeMapper.fromRequestToDto(request);
 
+            // Untuk ADD: jsonAfter TIDAK mengandung id, month, year
             DataChangeDto dto = dataChangeHelperMapper.forAdd(dataChangeDto, feeDto);
-
             DataChange entity = dataChangeMapper.toEntity(dto);
 
             dataChangeService.createChangeActionAdd(entity, ManagementFeeRaw.class);
 
         } catch (Exception e) {
             log.error("Unexpected error for fundCode {}", request.getFundCode(), e);
-            errors.add("Failed to process data");
+            errors.add("Failed to process data: " + e.getMessage());
             return buildError(request, errors);
         }
 
-        return null; // success
+        return null;
     }
 
     // ======================= HELPER ======================
