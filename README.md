@@ -920,3 +920,116 @@ public class ManagementFeeRawServiceImpl
     }
 }
 ```
+
+# Edit Management Fee
+
+```java
+@Override
+    @Transactional
+    public ProcessResult editById(EditRequest request, DataChangeDto dataChangeDto) {
+        ProcessResult processResult = new ProcessResult();
+        try {
+            // 1. Get existing entity
+            ManagementFeeRaw existingEntity = managementFeeRawRepository.findById(request.getId())
+                    .orElseThrow(() -> new DataNotFoundException("ManagementFeeRaw not found with id: " + request.getId()));
+
+            // 2. Map to DTOs
+            ManagementFeeDto beforeDto = managementFeeMapper.fromEntityToDto(existingEntity);
+            ManagementFeeDto afterDto = managementFeeMapper.fromRequestToDto(request);
+            
+            // 3. Set ID untuk afterDto (karena dari request tidak ada ID)
+            afterDto.setId(existingEntity.getId());
+
+            // 4. For EDIT: jsonBefore DAN jsonAfter sama-sama mengandung id, month, year
+            DataChangeDto dtoAudit = dataChangeHelperMapper.forEdit(dataChangeDto, beforeDto, afterDto);
+
+            // 5. Save to data change
+            DataChange dataChange = dataChangeMapper.toEntity(dtoAudit);
+            dataChange.setEntityId(String.valueOf(request.getId()));
+
+            dataChangeService.createChangeActionEdit(dataChange, ManagementFeeRaw.class);
+            
+            processResult.addSuccess();
+            
+        } catch (Exception e) {
+            log.error("Error editById id {}", request.getId(), e);
+            processResult.addError(
+                    ErrorDetail.of("id", String.valueOf(request.getId()), List.of(e.getMessage()))
+            );
+        }
+        return processResult;
+    }
+
+    @Override
+    @Transactional
+    public ProcessResult editApprove(ApproveDataChangeRequest request, String clientIp) {
+        ProcessResult processResult = new ProcessResult();
+        LocalDateTime now = LocalDateTime.now();
+        try {
+            Long dataChangeId = request.getDataChangeId();
+
+            // 1. Get DataChange + VALIDASI PENDING
+            DataChange dataChange = dataChangeService.getPendingById(dataChangeId);
+
+            Long entityId = dataChange.getEntityId() != null
+                    ? Long.valueOf(dataChange.getEntityId())
+                    : null;
+
+            Optional<ManagementFeeRaw> optional = entityId != null
+                    ? managementFeeRawRepository.findById(entityId)
+                    : Optional.empty();
+
+            if (optional.isPresent()) {
+                ManagementFeeRaw existingEntity = optional.get();
+                
+                // Parse JSON after untuk mendapatkan data baru
+                ManagementFeeDto afterPayload = jsonHelper.fromJson(dataChange.getJsonDataAfter(), ManagementFeeDto.class);
+
+                // Update entity dengan data baru
+                updateEntityFromDto(existingEntity, afterPayload);
+                
+                // Set approval fields
+                setApprovalFields(existingEntity, dataChange, request, clientIp, now);
+                managementFeeRawRepository.save(existingEntity);
+
+                // Set approval ke dataChange
+                setApprovalFieldsToDataChange(dataChange, request, clientIp, existingEntity.getId(), now);
+
+                // Update jsonAfter dengan data lengkap setelah update
+                ManagementFeeDto completeDto = managementFeeMapper.toDto(existingEntity);
+                dataChange.setJsonDataAfter(jsonHelper.toJson(completeDto));
+
+                dataChange.setDescription("Success approve edit of management fee with id: " + existingEntity.getId());
+                dataChangeService.setApprovalStatusIsApproved(dataChange);
+                processResult.addSuccess();
+                
+            } else {
+                // Entity not found
+                setApprovalFieldsToDataChange(dataChange, request, clientIp, null, now);
+                dataChangeService.setApprovalStatusIsRejected(
+                        dataChange,
+                        List.of("Management Fee not found")
+                );
+                processResult.addError(
+                        ErrorDetail.of(
+                                DATA_CHANGE_ID_FIELD,
+                                String.valueOf(dataChangeId),
+                                List.of("Management Fee not found")
+                        )
+                );
+            }
+            
+        } catch (Exception e) {
+            log.error("Error editApprove dataChangeId {}", request.getDataChangeId(), e);
+            processResult.addError(
+                    ErrorDetail.of(
+                            "dataChangeId",
+                            String.valueOf(request.getDataChangeId()),
+                            List.of("Failed to approve edit: " + e.getMessage())
+                    )
+            );
+        }
+        return processResult;
+    }
+
+```
