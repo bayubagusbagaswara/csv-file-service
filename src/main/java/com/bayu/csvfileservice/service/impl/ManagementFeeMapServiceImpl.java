@@ -8,6 +8,7 @@ import com.bayu.csvfileservice.model.*;
 import com.bayu.csvfileservice.model.enumerator.*;
 import com.bayu.csvfileservice.repository.*;
 import com.bayu.csvfileservice.service.ManagementFeeMapService;
+import com.bayu.csvfileservice.service.ResponseCodeService;
 import com.bayu.csvfileservice.util.BankCodeHelper;
 import com.bayu.csvfileservice.util.TransferMethodValidator;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -32,6 +34,7 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
     private final NcbsResponseRepository ncbsResponseRepository;
     private final BankCodeHelper bankHelper;
     private final TransferMethodValidator validator;
+    private final ResponseCodeService responseCodeService;
 
     @Override
     @Transactional
@@ -39,7 +42,8 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
 
         ProcessResult result = new ProcessResult();
 
-        // 🔥 Replace strategy
+        // Replace strategy
+        //todo: apakah harusnya ini ada tambahan kondisi ya? karena data Map bisa jadi emang sudah pernah dijalankan (kirim ke Middleware)
         mapRepository.deleteByMonthAndYear(month, year);
 
         List<ManagementFeeRaw> feeRawList = rawRepository.findAllByMonthAndYear(month, year);
@@ -98,6 +102,7 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
                         .debitAccount(dap.getCashAccount())
 
                         .status(MappingStatus.DRAFT)
+                        .referenceCombination(raw.getReferenceCombination())
                         .build();
 
                 mapRepository.save(map);
@@ -117,7 +122,7 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
 
     @Override
     @Transactional
-    public ProcessResult createTransaction(List<CreateTransactionRequest> requests) {
+    public ProcessResult createTransactions(List<CreateTransactionRequest> requests) {
         ProcessResult result = new ProcessResult();
 
         for (CreateTransactionRequest req : requests) {
@@ -161,32 +166,20 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
     }
 
     @Override
-    public ProcessResult send(List<Long> ids) {
+    public ProcessResult sendTransactions(List<Long> ids) {
         ProcessResult result = new ProcessResult();
-
         List<ManagementFeeMap> list = mapRepository.findAllById(ids);
 
         for (ManagementFeeMap item : list) {
-
             try {
-
                 validateSend(item);
 
-                // ================= CREATE REQUEST =================
-                NcbsRequest request = NcbsRequest.builder()
-                        .referenceId(UUID.randomUUID().toString())
-                        .entityId(item.getId())
-                        .createdDate(LocalDateTime.now())
-                        .transferMethod(item.getTransferMethod())
-                        .transferScope(item.getTransferScope())
-                        .service(resolveService(item))
-                        .build();
-
-                ncbsRequestRepository.save(request);
+                // Execute transfer
+                NcbsResponse response = routeTransferExecution(item);
 
                 // ================= UPDATE MAP =================
                 item.setStatus(MappingStatus.SENT);
-                item.setReferenceId(request.getReferenceId());
+                item.setReferenceId(response.getReferenceId());
                 item.setLastSentDate(LocalDateTime.now());
                 item.setRetryCount(
                         item.getRetryCount() == null ? 1 : item.getRetryCount() + 1
@@ -194,23 +187,14 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
 
                 mapRepository.save(item);
 
-                // ================= CALL MIDDLEWARE =================
-                NcbsResponse response = simulateResponse(request);
-
-                ncbsResponseRepository.save(response);
-
                 // ================= UPDATE STATUS =================
                 updateStatus(item, response);
-
                 result.addSuccess();
 
             } catch (Exception e) {
-
                 log.error("Send failed id {}", item.getId(), e);
-
                 item.setStatus(MappingStatus.FAILED);
                 mapRepository.save(item);
-
                 result.addError(
                         ErrorDetail.of(
                                 "id",
@@ -220,11 +204,113 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
                 );
             }
         }
-
         return result;
-
     }
 
+    // ======================= ROUTER ======================
+    private NcbsResponse routeTransferExecution(ManagementFeeMap item) {
+        return switch (item.getTransferScope()) {
+            case INTERNAL -> executeInternalTransfer(item);
+            case EXTERNAL -> executeExternalTransfer(item);
+        };
+    }
+
+    // ======================= INTERNAL =====================
+    private NcbsResponse executeInternalTransfer(ManagementFeeMap item) {
+        if (item.getTransferMethod() != TransferMethod.OVERBOOKING) {
+            throw new IllegalArgumentException("Internal transfer must use OVERBOOKING");
+        }
+        return executeOverbookingTransferr(item);
+    }
+
+    // ======================= EXTERNAL =====================
+    private NcbsResponse executeExternalTransfer(ManagementFeeMap item) {
+        return switch (item.getTransferMethod()) {
+            case BI_FAST -> executeBiFastTransfer(item);
+            case SKN, RTGS -> executeSknRtgsTransfer(item);
+            case OVERBOOKING ->
+                throw new IllegalArgumentException("External transfer cannot use OVERBOOKING");
+            default -> throw new IllegalStateException("Unsupported transfer method");
+        };
+    }
+
+    // ======================= OVERBOOKING ========================
+    private NcbsResponse executeOverbookingTransfer(ManagementFeeMap item) {
+        NcbsRequest request = buildNcbsRequestPayload(
+                item, MiddlewareServiceType.OVERBOOKING_CASA
+        );
+        ncbsRequestRepository.save(request);
+        NcbsResponse response = invokeOverbookingMiddleware(request);
+        ncbsResponseRepository.save(response);
+        return response;
+    }
+
+    // ======================= BI-FAST =======================
+
+    private NcbsResponse executeBiFastTransfer(ManagementFeeMap item) {
+
+        NcbsRequest request = buildNcbsRequestPayload(
+                item,
+                MiddlewareServiceType.TRANSFER_SKN_RTGS
+        );
+
+        requestRepository.save(request);
+
+        NcbsResponse response = invokeBiFastMiddleware(request);
+
+        responseRepository.save(response);
+
+        return response;
+    }
+
+    // ======================= SKN / RTGS =======================
+
+    private NcbsResponse executeSknRtgsTransfer(ManagementFeeMap item) {
+
+        NcbsRequest request = buildNcbsRequestPayload(
+                item,
+                MiddlewareServiceType.TRANSFER_SKN_RTGS
+        );
+
+        requestRepository.save(request);
+
+        NcbsResponse response = invokeSknRtgsMiddleware(request);
+
+        responseRepository.save(response);
+
+        return response;
+    }
+
+    // ======================= BUILD REQUEST =======================
+
+    private NcbsRequest buildNcbsRequestPayload(
+            ManagementFeeMap item,
+            MiddlewareServiceType service
+    ) {
+
+        return NcbsRequest.builder()
+                .referenceId(UUID.randomUUID().toString())
+                .entityId(item.getId())
+                .createdDate(LocalDateTime.now())
+                .transferScope(item.getTransferScope())
+                .transferMethod(item.getTransferMethod())
+                .service(service)
+                .build();
+    }
+
+    // ======================= MIDDLEWARE =======================
+
+    private NcbsResponse invokeOverbookingMiddleware(NcbsRequest request) {
+        return middlewareService.callOverbooking(request);
+    }
+
+    private NcbsResponse invokeBiFastMiddleware(NcbsRequest request) {
+        return middlewareService.callBiFast(request);
+    }
+
+    private NcbsResponse invokeSknRtgsMiddleware(NcbsRequest request) {
+        return middlewareService.callSknRtgs(request);
+    }
 
     // ======================= HELPER =======================
 
@@ -264,22 +350,14 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
     }
 
     private void updateStatus(ManagementFeeMap item, NcbsResponse response) {
-
         if (response.getNcbsStatus() == NcbsStatus.SUCCESS) {
-
             item.setStatus(MappingStatus.SUCCESS);
-
-        } else if (response.getNcbsStatus() == NcbsStatus.INSUFFICIENT_BALANCE) {
-
+        } else if (responseCodeService.isInsufficientBalance(response.getResponseCode())) {
             item.setStatus(MappingStatus.RETRY);
-
         } else {
-
             item.setStatus(MappingStatus.FAILED);
         }
-
         mapRepository.save(item);
     }
-
 
 }
