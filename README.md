@@ -1033,3 +1033,442 @@ public class ManagementFeeRawServiceImpl
     }
 
 ```
+
+
+# Contoh Transfer BiFast
+
+```java
+
+// 1. buat InquiryAccountRequest
+InquiryAccountRequest inquiryAccountRequest = createInquiryAccountRequest(managementFeeMap);
+
+// set referenceId untuk inquiry, sistem sebelumnya ada 2 field, yakni inquiryReferenceId dan referenceId
+managementFeeMap.setInquiryReferenceId("uuid");
+
+// create NCBS Request dan save
+
+// send ke middleware
+InquiryAccountResponse inquiryAccountResponse = middlewareService.inquiryAccount(inquiryAccountRequest, managementFeeMap.getReferenceId);
+
+// tangkap response inquiry dan simpan NCBS Response
+
+// cek response code service inquiry
+
+// jika response code gagal, maka tidak akan lanjut langsung transaksi failed
+
+// jika response code sukses, maka lanjut ke proses selanjutnya
+
+// proses selanjutnya adalah membuat CreditTransferBiFastRequest
+CreditTransferBiFastRequest creditTransferBiFastRequest = createCreditTransferBiFast(inquiryResponse.getData, managementFeeMap);
+
+// create NCBS Request dan save
+
+// send ke middleware
+CreditTransferResponse creditTransferResponse = middlewareService.creditTransfer(referenceId, creditTransferBiFastRequest);
+
+// biasanya response creditTransfer ada field payUserRefNo. Kita tangkap datanya lalu kita simpan di ncbsResponse dengan field sendiri
+
+// tangkap response dan save NCBS Response
+
+// handle juga jika saat credit transfer terjadi saldo kurang
+
+
+```
+
+# Flow SKN RTGS
+
+```java
+// create request untuk skn rtgs
+
+// create NCBS request
+
+// hit ke middleware service skn rtgs, responsenya SknRtgsResponse
+
+// create NCBS Response
+
+// handle response
+
+```
+
+# Flow Overbooking
+```java
+// create Overbooking request
+
+// create NCBS Request
+
+// hit middlewareService overbooking. responsenya overbooking response
+
+// create NCBS Response
+
+// handle response
+```
+
+# Transfer Executor
+
+```java
+public interface TransferExecutor {
+
+    boolean supports(TransferMethod method);
+
+    NcbsResponse execute(ManagementFeeMap item);
+}
+```
+
+# BASE ABSTRACT — BaseTransferExecutor
+
+```java
+@RequiredArgsConstructor
+@Slf4j
+public abstract class BaseTransferExecutor implements TransferExecutor {
+
+    protected final NcbsRequestRepository requestRepository;
+    protected final NcbsResponseRepository responseRepository;
+    protected final ObjectMapper objectMapper;
+
+    protected NcbsRequest buildNcbsRequest(
+            ManagementFeeMap item,
+            MiddlewareServiceType service,
+            String referenceId
+    ) {
+        return NcbsRequest.builder()
+                .referenceId(referenceId)
+                .entityId(item.getId())
+                .createdDate(LocalDateTime.now())
+                .transferScope(item.getTransferScope())
+                .transferMethod(item.getTransferMethod())
+                .service(service)
+                .build();
+    }
+
+    protected NcbsResponse buildNcbsResponse(
+            NcbsRequest request,
+            Object response
+    ) {
+        try {
+            return NcbsResponse.builder()
+                    .referenceId(request.getReferenceId())
+                    .entityId(request.getEntityId())
+                    .createdDate(LocalDateTime.now())
+                    .service(request.getService())
+                    .transferMethod(request.getTransferMethod())
+                    .transferScope(request.getTransferScope())
+                    .jsonResponse(objectMapper.writeValueAsString(response))
+                    .responseCode(extractResponseCode(response))
+                    .responseMessage(extractResponseMessage(response))
+                    .build();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to build NcbsResponse", e);
+        }
+    }
+
+    protected String extractResponseCode(Object response) {
+        if (response instanceof OverbookingResponse r) return r.getResponseCode();
+        if (response instanceof SknRtgsTransferResponse r) return r.getResponseCode();
+        if (response instanceof CreditTransferResponse r) return r.getResponseCode();
+        if (response instanceof InquiryAccountResponse r) return r.getResponseCode();
+        return null;
+    }
+
+    protected String extractResponseMessage(Object response) {
+        if (response instanceof OverbookingResponse r) return r.getResponseMessage();
+        if (response instanceof SknRtgsTransferResponse r) return r.getResponseMessage();
+        if (response instanceof CreditTransferResponse r) return r.getResponseMessage();
+        if (response instanceof InquiryAccountResponse r) return r.getResponseMessage();
+        return null;
+    }
+}
+```
+
+# Overbooking Executor
+
+```java
+@Component
+@RequiredArgsConstructor
+public class OverbookingTransferExecutor extends BaseTransferExecutor {
+
+    private final MiddlewareService middlewareService;
+
+    @Override
+    public boolean supports(TransferMethod method) {
+        return method == TransferMethod.OVERBOOKING;
+    }
+
+    @Override
+    public NcbsResponse execute(ManagementFeeMap item) {
+
+        String referenceId = UUID.randomUUID().toString();
+
+        OverbookingRequest request = OverbookingRequest.builder()
+                .debitAccount(item.getDebitAccount())
+                .creditAccount(item.getCreditAccount())
+                .amount(item.getAmount())
+                .remark(item.getDescription())
+                .build();
+
+        NcbsRequest ncbsRequest = buildNcbsRequest(
+                item,
+                MiddlewareServiceType.OVERBOOKING_CASA,
+                referenceId
+        );
+
+        requestRepository.save(ncbsRequest);
+
+        OverbookingResponse response =
+                middlewareService.overbooking(referenceId, request);
+
+        if (response == null) {
+            throw new IllegalStateException("Overbooking response is null");
+        }
+
+        NcbsResponse ncbsResponse =
+                buildNcbsResponse(ncbsRequest, response);
+
+        ncbsResponse.setProviderSystem(response.getTransactionId());
+
+        responseRepository.save(ncbsResponse);
+
+        return ncbsResponse;
+    }
+}
+```
+
+# SKN / RTGS EXECUTOR
+
+```java
+@Component
+@RequiredArgsConstructor
+public class SknRtgsTransferExecutor extends BaseTransferExecutor {
+
+    private final MiddlewareService middlewareService;
+
+    @Override
+    public boolean supports(TransferMethod method) {
+        return method == TransferMethod.SKN || method == TransferMethod.RTGS;
+    }
+
+    @Override
+    public NcbsResponse execute(ManagementFeeMap item) {
+
+        String referenceId = UUID.randomUUID().toString();
+
+        SknRtgsTransferRequest request = SknRtgsTransferRequest.builder()
+                .debitAccount(item.getDebitAccount())
+                .beneficiaryAccount(item.getCreditAccount())
+                .beneficiaryName(item.getBeneficiaryName())
+                .bankCode(item.getBankCode())
+                .amount(item.getAmount())
+                .remark(item.getDescription())
+                .build();
+
+        NcbsRequest ncbsRequest = buildNcbsRequest(
+                item,
+                MiddlewareServiceType.TRANSFER_SKN_RTGS,
+                referenceId
+        );
+
+        requestRepository.save(ncbsRequest);
+
+        SknRtgsTransferResponse response =
+                middlewareService.transferSknRtgs(referenceId, request);
+
+        if (response == null) {
+            throw new IllegalStateException("SKN/RTGS response is null");
+        }
+
+        NcbsResponse ncbsResponse =
+                buildNcbsResponse(ncbsRequest, response);
+
+        ncbsResponse.setProviderSystem(response.getTransactionId());
+
+        responseRepository.save(ncbsResponse);
+
+        return ncbsResponse;
+    }
+}
+```
+
+# BI-FAST EXECUTOR
+
+```java
+@Component
+@RequiredArgsConstructor
+public class BiFastTransferExecutor extends BaseTransferExecutor {
+
+    private final MiddlewareService middlewareService;
+    private final ResponseCodeService responseCodeService;
+
+    @Override
+    public boolean supports(TransferMethod method) {
+        return method == TransferMethod.BIFAST;
+    }
+
+    @Override
+    public NcbsResponse execute(ManagementFeeMap item) {
+
+        // ================= INQUIRY =================
+        String inquiryRefId = UUID.randomUUID().toString();
+
+        InquiryAccountRequest inquiryRequest = InquiryAccountRequest.builder()
+                .accountNumber(item.getCreditAccount())
+                .bankCode(item.getBankCode())
+                .amount(item.getAmount())
+                .build();
+
+        NcbsRequest inquiryNcbsRequest = buildNcbsRequest(
+                item,
+                MiddlewareServiceType.INQUIRY_ACCOUNT,
+                inquiryRefId
+        );
+
+        requestRepository.save(inquiryNcbsRequest);
+
+        InquiryAccountResponse inquiryResponse =
+                middlewareService.inquiryAccount(inquiryRequest, inquiryRefId);
+
+        if (inquiryResponse == null) {
+            throw new IllegalStateException("Inquiry response is null");
+        }
+
+        NcbsResponse inquiryNcbsResponse =
+                buildNcbsResponse(inquiryNcbsRequest, inquiryResponse);
+
+        responseRepository.save(inquiryNcbsResponse);
+
+        if (!responseCodeService.isSuccess(inquiryResponse.getResponseCode())) {
+            return inquiryNcbsResponse;
+        }
+
+        // ================= TRANSFER =================
+        String transferRefId = UUID.randomUUID().toString();
+
+        CreditTransferBiFastRequest transferRequest =
+                CreditTransferBiFastRequest.builder()
+                        .beneficiaryName(inquiryResponse.getData().getAccountName())
+                        .beneficiaryAccount(item.getCreditAccount())
+                        .bankCode(item.getBankCode())
+                        .amount(item.getAmount())
+                        .remark(item.getDescription())
+                        .build();
+
+        NcbsRequest transferNcbsRequest = buildNcbsRequest(
+                item,
+                MiddlewareServiceType.TRANSFER_SKN_RTGS,
+                transferRefId
+        );
+
+        requestRepository.save(transferNcbsRequest);
+
+        CreditTransferResponse transferResponse =
+                middlewareService.creditTransfer(transferRefId, transferRequest);
+
+        if (transferResponse == null) {
+            throw new IllegalStateException("BiFast transfer response is null");
+        }
+
+        NcbsResponse transferNcbsResponse =
+                buildNcbsResponse(transferNcbsRequest, transferResponse);
+
+        transferNcbsResponse.setProviderSystem(
+                transferResponse.getPayUserRefNo()
+        );
+
+        responseRepository.save(transferNcbsResponse);
+
+        return transferNcbsResponse;
+    }
+}
+```
+
+# SERVICE — ManagementFeeMapService (FINAL)
+
+```java
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class ManagementFeeMapService {
+
+    private final ManagementFeeMapRepository mapRepository;
+    private final ResponseCodeService responseCodeService;
+    private final List<TransferExecutor> executors;
+
+    public ProcessResult sendTransactions(List<Long> ids) {
+
+        ProcessResult result = new ProcessResult();
+
+        List<ManagementFeeMap> list = mapRepository.findAllById(ids);
+
+        for (ManagementFeeMap item : list) {
+
+            try {
+
+                validateSend(item);
+
+                TransferExecutor executor = executors.stream()
+                        .filter(e -> e.supports(item.getTransferMethod()))
+                        .findFirst()
+                        .orElseThrow(() ->
+                                new IllegalStateException("No executor found"));
+
+                NcbsResponse response = executor.execute(item);
+
+                // ================= UPDATE =================
+
+                item.setStatus(MappingStatus.SENT);
+                item.setReferenceId(response.getReferenceId());
+                item.setLastSentDate(LocalDateTime.now());
+                item.setRetryCount(
+                        item.getRetryCount() == null ? 1 : item.getRetryCount() + 1
+                );
+
+                updateStatus(item, response);
+
+                mapRepository.save(item);
+
+                result.addSuccess();
+
+            } catch (Exception e) {
+
+                log.error("Send failed id {}", item.getId(), e);
+
+                item.setStatus(MappingStatus.FAILED);
+                mapRepository.save(item);
+
+                result.addError(
+                        ErrorDetail.of(
+                                "id",
+                                String.valueOf(item.getId()),
+                                List.of(e.getMessage())
+                        )
+                );
+            }
+        }
+
+        return result;
+    }
+
+    private void validateSend(ManagementFeeMap item) {
+
+        if (!List.of(MappingStatus.READY, MappingStatus.RETRY)
+                .contains(item.getStatus())) {
+
+            throw new IllegalStateException("Invalid status for send");
+        }
+    }
+
+    private void updateStatus(ManagementFeeMap item, NcbsResponse response) {
+
+        if (responseCodeService.isSuccess(response.getResponseCode())) {
+
+            item.setStatus(MappingStatus.SUCCESS);
+
+        } else if (responseCodeService.isInsufficientBalance(response.getResponseCode())) {
+
+            item.setStatus(MappingStatus.RETRY);
+
+        } else {
+
+            item.setStatus(MappingStatus.FAILED);
+        }
+    }
+}
+```
