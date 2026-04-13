@@ -10,8 +10,8 @@ public interface ManagementFeeMapService {
 
     ProcessResult map(Month month, Integer year);
 
-    ProcessResult createTransaction(List<CreateTransactionRequest> requests);
+    ProcessResult createTransactions(List<CreateTransactionRequest> requests);
 
-    ProcessResult send(List<Long> ids);
+    ProcessResult sendTransactions(List<Long> ids);
 
 }
