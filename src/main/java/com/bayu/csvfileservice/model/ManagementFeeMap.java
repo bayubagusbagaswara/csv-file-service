@@ -74,4 +74,5 @@ public class ManagementFeeMap extends BaseApproval {
 
     private LocalDateTime lastSentDate;
 
+    private String referenceCombination;
 }
