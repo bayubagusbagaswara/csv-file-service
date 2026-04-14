@@ -1472,3 +1472,450 @@ public class ManagementFeeMapService {
     }
 }
 ```
+
+# Selasa 14 April 2026
+
+## Final Architecture
+
+```bash
+Controller
+   ↓
+Service (ManagementFee / TaxBroker)
+   ↓
+TransferOrchestratorService   ✅ GENERIC
+   ↓
+TransferExecutor              ✅ GENERIC INTERFACE
+   ↓
+Executor spesifik:
+   ├── OverbookingExecutor
+   ├── SknRtgsExecutor
+   ├── BiFastExecutor
+   ↓
+MiddlewareService             ❗ SPESIFIK
+   ↓
+NcbsRequest / NcbsResponse
+```
+## 1. Interface Transferable
+semua entity yang bisa dikirim ke middleware harus implement ini
+```java
+public interface Transferable {
+
+    Long getId();
+
+    String getDebitAccount();
+
+    String getCreditAccount();
+
+    String getBeneficiaryName();
+
+    String getBankCode();
+
+    BigDecimal getAmount();
+
+    String getDescription();
+
+    TransferMethod getTransferMethod();
+
+    TransferScope getTransferScope();
+}
+```
+
+## Entity ManagementFeeMap
+```java
+@Entity
+@Table(name = "management_fee_map")
+@Data
+public class ManagementFeeMap implements Transferable {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String debitAccount;
+    private String creditAccount;
+    private String beneficiaryName;
+    private String bankCode;
+    private BigDecimal amount;
+    private String description;
+
+    @Enumerated(EnumType.STRING)
+    private TransferMethod transferMethod;
+
+    @Enumerated(EnumType.STRING)
+    private TransferScope transferScope;
+
+    @Enumerated(EnumType.STRING)
+    private MappingStatus status;
+
+    private String referenceId;
+    private Integer retryCount;
+    private LocalDateTime lastSentDate;
+}
+```
+
+## Entity TraxBrokerFee
+
+```java
+@Entity
+@Table(name = "tax_broker_fee")
+@Data
+public class TaxBrokerFee implements Transferable {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String debitAccount;
+    private String creditAccount;
+    private String beneficiaryName;
+    private String bankCode;
+    private BigDecimal amount;
+    private String description;
+
+    @Enumerated(EnumType.STRING)
+    private TransferMethod transferMethod;
+
+    @Enumerated(EnumType.STRING)
+    private TransferScope transferScope;
+
+    @Enumerated(EnumType.STRING)
+    private MappingStatus status;
+
+    private String referenceId;
+    private Integer retryCount;
+}
+```
+
+## Interface TransferExecutor
+```java
+public interface TransferExecutor {
+
+    boolean supports(TransferMethod method);
+
+    NcbsResponse execute(Transferable item);
+}
+```
+
+## Base Executor (Common Logic)
+
+```java
+@RequiredArgsConstructor
+public abstract class BaseTransferExecutor implements TransferExecutor {
+
+    protected final NcbsRequestRepository requestRepository;
+    protected final NcbsResponseRepository responseRepository;
+    protected final ObjectMapper objectMapper;
+
+    protected NcbsRequest createNcbsRequest(
+            Transferable item,
+            MiddlewareServiceType service,
+            String referenceId
+    ) {
+        return NcbsRequest.builder()
+                .referenceId(referenceId)
+                .entityId(item.getId())
+                .createdDate(LocalDateTime.now())
+                .transferMethod(item.getTransferMethod())
+                .transferScope(item.getTransferScope())
+                .service(service)
+                .build();
+    }
+
+    protected NcbsResponse createNcbsResponse(
+            NcbsRequest request,
+            Object response
+    ) {
+        try {
+            return NcbsResponse.builder()
+                    .referenceId(request.getReferenceId())
+                    .entityId(request.getEntityId())
+                    .createdDate(LocalDateTime.now())
+                    .jsonResponse(objectMapper.writeValueAsString(response))
+                    .responseCode(extractCode(response))
+                    .responseMessage(extractMessage(response))
+                    .build();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String extractCode(Object res) {
+        if (res instanceof OverbookingResponse r) return r.getResponseCode();
+        if (res instanceof SknRtgsTransferResponse r) return r.getResponseCode();
+        if (res instanceof CreditTransferResponse r) return r.getResponseCode();
+        if (res instanceof InquiryAccountResponse r) return r.getResponseCode();
+        return null;
+    }
+
+    private String extractMessage(Object res) {
+        if (res instanceof OverbookingResponse r) return r.getResponseMessage();
+        if (res instanceof SknRtgsTransferResponse r) return r.getResponseMessage();
+        if (res instanceof CreditTransferResponse r) return r.getResponseMessage();
+        if (res instanceof InquiryAccountResponse r) return r.getResponseMessage();
+        return null;
+    }
+}
+```
+
+## 5. Executor Specific
+
+### Overbooking
+```java
+@Component
+@RequiredArgsConstructor
+public class OverbookingExecutor extends BaseTransferExecutor {
+
+    private final MiddlewareService middleware;
+
+    @Override
+    public boolean supports(TransferMethod method) {
+        return method == TransferMethod.OVERBOOKING;
+    }
+
+    @Override
+    public NcbsResponse execute(Transferable item) {
+
+        String refId = UUID.randomUUID().toString();
+
+        OverbookingRequest request = OverbookingRequest.builder()
+                .debitAccount(item.getDebitAccount())
+                .creditAccount(item.getCreditAccount())
+                .amount(item.getAmount())
+                .remark(item.getDescription())
+                .build();
+
+        NcbsRequest ncbsRequest =
+                createNcbsRequest(item, MiddlewareServiceType.OVERBOOKING_CASA, refId);
+
+        requestRepository.save(ncbsRequest);
+
+        OverbookingResponse response =
+                middleware.overbooking(refId, request);
+
+        NcbsResponse ncbsResponse =
+                createNcbsResponse(ncbsRequest, response);
+
+        responseRepository.save(ncbsResponse);
+
+        return ncbsResponse;
+    }
+}
+```
+
+### SKN RTGS
+```java
+@Component
+@RequiredArgsConstructor
+public class SknRtgsExecutor extends BaseTransferExecutor {
+
+    private final MiddlewareService middleware;
+
+    @Override
+    public boolean supports(TransferMethod method) {
+        return method == TransferMethod.SKN || method == TransferMethod.RTGS;
+    }
+
+    @Override
+    public NcbsResponse execute(Transferable item) {
+
+        String refId = UUID.randomUUID().toString();
+
+        SknRtgsTransferRequest request = SknRtgsTransferRequest.builder()
+                .debitAccount(item.getDebitAccount())
+                .beneficiaryAccount(item.getCreditAccount())
+                .beneficiaryName(item.getBeneficiaryName())
+                .bankCode(item.getBankCode())
+                .amount(item.getAmount())
+                .remark(item.getDescription())
+                .build();
+
+        NcbsRequest ncbsRequest =
+                createNcbsRequest(item, MiddlewareServiceType.TRANSFER_SKN_RTGS, refId);
+
+        requestRepository.save(ncbsRequest);
+
+        SknRtgsTransferResponse response =
+                middleware.transferSknRtgs(refId, request);
+
+        NcbsResponse ncbsResponse =
+                createNcbsResponse(ncbsRequest, response);
+
+        responseRepository.save(ncbsResponse);
+
+        return ncbsResponse;
+    }
+}
+```
+
+### BI-FAST 2 STEP
+
+```java
+@Component
+@RequiredArgsConstructor
+public class BiFastExecutor extends BaseTransferExecutor {
+
+    private final MiddlewareService middleware;
+    private final ResponseCodeService responseCodeService;
+
+    @Override
+    public boolean supports(TransferMethod method) {
+        return method == TransferMethod.BIFAST;
+    }
+
+    @Override
+    public NcbsResponse execute(Transferable item) {
+
+        // ===== INQUIRY =====
+        String inquiryRef = UUID.randomUUID().toString();
+
+        InquiryAccountRequest inquiryReq = InquiryAccountRequest.builder()
+                .accountNumber(item.getCreditAccount())
+                .bankCode(item.getBankCode())
+                .amount(item.getAmount())
+                .build();
+
+        NcbsRequest inquiryNcbs =
+                createNcbsRequest(item, MiddlewareServiceType.INQUIRY_ACCOUNT, inquiryRef);
+
+        requestRepository.save(inquiryNcbs);
+
+        InquiryAccountResponse inquiryRes =
+                middleware.inquiryAccount(inquiryReq, inquiryRef);
+
+        NcbsResponse inquiryResponse =
+                createNcbsResponse(inquiryNcbs, inquiryRes);
+
+        responseRepository.save(inquiryResponse);
+
+        if (!responseCodeService.isSuccess(inquiryRes.getResponseCode())) {
+            return inquiryResponse;
+        }
+
+        // ===== TRANSFER =====
+        String transferRef = UUID.randomUUID().toString();
+
+        CreditTransferBiFastRequest transferReq =
+                CreditTransferBiFastRequest.builder()
+                        .beneficiaryName(inquiryRes.getData().getAccountName())
+                        .beneficiaryAccount(item.getCreditAccount())
+                        .bankCode(item.getBankCode())
+                        .amount(item.getAmount())
+                        .remark(item.getDescription())
+                        .build();
+
+        NcbsRequest transferNcbs =
+                createNcbsRequest(item, MiddlewareServiceType.TRANSFER_SKN_RTGS, transferRef);
+
+        requestRepository.save(transferNcbs);
+
+        CreditTransferResponse transferRes =
+                middleware.creditTransfer(transferRef, transferReq);
+
+        NcbsResponse transferResponse =
+                createNcbsResponse(transferNcbs, transferRes);
+
+        responseRepository.save(transferResponse);
+
+        return transferResponse;
+    }
+}
+```
+
+## 6. ORCHESTRATOR (GENERIC CORE)
+
+```java
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class TransferOrchestratorService {
+
+    private final List<TransferExecutor> executors;
+    private final ResponseCodeService responseCodeService;
+
+    public <T extends Transferable> ProcessResult process(List<T> items) {
+
+        ProcessResult result = new ProcessResult();
+
+        for (T item : items) {
+
+            try {
+
+                TransferExecutor executor = executors.stream()
+                        .filter(e -> e.supports(item.getTransferMethod()))
+                        .findFirst()
+                        .orElseThrow();
+
+                NcbsResponse response = executor.execute(item);
+
+                result.addSuccess();
+
+            } catch (Exception e) {
+
+                log.error("Transfer failed id {}", item.getId(), e);
+
+                result.addError(
+                        ErrorDetail.of(
+                                "id",
+                                String.valueOf(item.getId()),
+                                List.of(e.getMessage())
+                        )
+                );
+            }
+        }
+
+        return result;
+    }
+}
+```
+
+## 7. SERVICE (PER DOMAIN)
+
+### Management Fee
+```java
+@Service
+@RequiredArgsConstructor
+public class ManagementFeeMapService {
+
+    private final ManagementFeeMapRepository repo;
+    private final TransferOrchestratorService orchestrator;
+
+    public ProcessResult send(List<Long> ids) {
+        return orchestrator.process(repo.findAllById(ids));
+    }
+}
+```
+
+### TaxBrokerFee
+
+```java
+@Service
+@RequiredArgsConstructor
+public class TaxBrokerFeeService {
+
+    private final TaxBrokerFeeRepository repo;
+    private final TransferOrchestratorService orchestrator;
+
+    public ProcessResult send(List<Long> ids) {
+        return orchestrator.process(repo.findAllById(ids));
+    }
+}
+```
+
+### Transferable final
+
+```java
+public interface Transferable {
+
+    Long getId();
+
+    String getDebitAccount();
+
+    String getCreditAccount();
+
+    BigDecimal getAmount();
+
+    TransferMethod getTransferMethod();
+
+    TransferScope getTransferScope();
+}
+```
