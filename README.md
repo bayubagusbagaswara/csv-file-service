@@ -1919,3 +1919,402 @@ public interface Transferable {
     TransferScope getTransferScope();
 }
 ```
+
+# Rabu 15 April 2026
+
+## Struktur Folder
+```bash
+com.yourapp
+│
+├── domain
+│   └── entity
+│       ├── ManagementFeeMap.java
+│       ├── TaxBrokerFee.java
+│       ├── NcbsRequest.java
+│       └── NcbsResponse.java
+│
+├── application
+│   ├── dto
+│   │   ├── Transferable.java
+│   │   └── TransferableAdapter.java
+│   │
+│   ├── mapper
+│   │   └── TransferableMapper.java
+│   │
+│   ├── executor
+│   │   ├── TransferExecutor.java
+│   │   ├── BaseTransferExecutor.java
+│   │   └── OverbookingExecutor.java
+│   │
+│   └── orchestrator
+│       └── TransferOrchestratorService.java
+│
+├── infrastructure
+│   ├── repository
+│   └── service
+│       └── MiddlewareService.java
+│
+└── service
+    ├── ManagementFeeMapService.java
+    └── TaxBrokerFeeService.java
+```
+
+## 1. Transferable
+
+```java
+public interface Transferable {
+
+    Long getId();
+
+    String getDebitAccount();
+
+    String getCreditAccount();
+
+    BigDecimal getAmount();
+
+    String getDescription();
+
+    TransferMethod getTransferMethod();
+
+    TransferScope getTransferScope();
+}
+```
+## 2. Transferable Adapter
+
+```java
+public class TransferableAdapter implements Transferable {
+
+    private Long id;
+    private String debitAccount;
+    private String creditAccount;
+    private BigDecimal amount;
+    private String description;
+    private TransferMethod transferMethod;
+    private TransferScope transferScope;
+
+    public TransferableAdapter() {}
+
+    public TransferableAdapter(Long id,
+                               String debitAccount,
+                               String creditAccount,
+                               BigDecimal amount,
+                               String description,
+                               TransferMethod transferMethod,
+                               TransferScope transferScope) {
+        this.id = id;
+        this.debitAccount = debitAccount;
+        this.creditAccount = creditAccount;
+        this.amount = amount;
+        this.description = description;
+        this.transferMethod = transferMethod;
+        this.transferScope = transferScope;
+    }
+
+    public Long getId() { return id; }
+    public String getDebitAccount() { return debitAccount; }
+    public String getCreditAccount() { return creditAccount; }
+    public BigDecimal getAmount() { return amount; }
+    public String getDescription() { return description; }
+    public TransferMethod getTransferMethod() { return transferMethod; }
+    public TransferScope getTransferScope() { return transferScope; }
+
+    public void setId(Long id) { this.id = id; }
+    public void setDebitAccount(String debitAccount) { this.debitAccount = debitAccount; }
+    public void setCreditAccount(String creditAccount) { this.creditAccount = creditAccount; }
+    public void setAmount(BigDecimal amount) { this.amount = amount; }
+    public void setDescription(String description) { this.description = description; }
+    public void setTransferMethod(TransferMethod transferMethod) { this.transferMethod = transferMethod; }
+    public void setTransferScope(TransferScope transferScope) { this.transferScope = transferScope; }
+}
+```
+
+## 3. TransferableMapper
+
+```java
+@Component
+public class TransferableMapper {
+
+    public Transferable fromManagementFee(ManagementFeeMap e) {
+
+        TransferableAdapter dto = new TransferableAdapter();
+
+        dto.setId(e.getId());
+        dto.setDebitAccount(e.getDebitAccount());
+        dto.setCreditAccount(e.getCreditAccount());
+        dto.setAmount(e.getAmount());
+        dto.setDescription(e.getDescription());
+        dto.setTransferMethod(e.getTransferMethod());
+        dto.setTransferScope(e.getTransferScope());
+
+        return dto;
+    }
+
+    public Transferable fromTaxBroker(TaxBrokerFee e) {
+
+        TransferableAdapter dto = new TransferableAdapter();
+
+        dto.setId(e.getId());
+        dto.setDebitAccount(e.getCashAccount());
+        dto.setCreditAccount(e.getDestinationAccount());
+        dto.setAmount(e.getTaxAmount());
+        dto.setDescription("Tax Broker Fee");
+        dto.setTransferMethod(e.getTransferMethod());
+        dto.setTransferScope(e.getTransferScope());
+
+        return dto;
+    }
+}
+```
+
+## 4. TransferExecutor
+
+```java
+public interface TransferExecutor {
+
+    boolean supports(TransferMethod method);
+
+    NcbsResponse execute(Transferable item);
+}
+```
+
+## 5. BaseTransferExecutor
+```java
+public abstract class BaseTransferExecutor implements TransferExecutor {
+
+    protected final NcbsRequestRepository requestRepository;
+    protected final NcbsResponseRepository responseRepository;
+    protected final ObjectMapper objectMapper;
+
+    protected BaseTransferExecutor(NcbsRequestRepository requestRepository,
+                                   NcbsResponseRepository responseRepository,
+                                   ObjectMapper objectMapper) {
+        this.requestRepository = requestRepository;
+        this.responseRepository = responseRepository;
+        this.objectMapper = objectMapper;
+    }
+
+    protected NcbsRequest createRequest(Transferable item,
+                                        MiddlewareServiceType service,
+                                        String refId) {
+
+        NcbsRequest req = new NcbsRequest();
+        req.setReferenceId(refId);
+        req.setEntityId(item.getId());
+        req.setCreatedDate(LocalDateTime.now());
+        req.setTransferMethod(item.getTransferMethod());
+        req.setTransferScope(item.getTransferScope());
+        req.setService(service);
+
+        return req;
+    }
+
+    protected NcbsResponse createResponse(NcbsRequest req, Object res) {
+
+        NcbsResponse response = new NcbsResponse();
+
+        try {
+            response.setReferenceId(req.getReferenceId());
+            response.setEntityId(req.getEntityId());
+            response.setCreatedDate(LocalDateTime.now());
+            response.setJsonResponse(objectMapper.writeValueAsString(res));
+            response.setResponseCode(extractCode(res));
+            response.setResponseMessage(extractMessage(res));
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        return response;
+    }
+
+    private String extractCode(Object res) {
+
+        if (res instanceof OverbookingResponse) {
+            return ((OverbookingResponse) res).getResponseCode();
+        }
+
+        if (res instanceof SknRtgsTransferResponse) {
+            return ((SknRtgsTransferResponse) res).getResponseCode();
+        }
+
+        return null;
+    }
+
+    private String extractMessage(Object res) {
+
+        if (res instanceof OverbookingResponse) {
+            return ((OverbookingResponse) res).getResponseMessage();
+        }
+
+        if (res instanceof SknRtgsTransferResponse) {
+            return ((SknRtgsTransferResponse) res).getResponseMessage();
+        }
+
+        return null;
+    }
+}
+```
+
+## 6. Overbooking Executor
+
+```java
+@Component
+public class OverbookingExecutor extends BaseTransferExecutor {
+
+    private final MiddlewareService middleware;
+
+    public OverbookingExecutor(NcbsRequestRepository requestRepository,
+                               NcbsResponseRepository responseRepository,
+                               ObjectMapper objectMapper,
+                               MiddlewareService middleware) {
+        super(requestRepository, responseRepository, objectMapper);
+        this.middleware = middleware;
+    }
+
+    @Override
+    public boolean supports(TransferMethod method) {
+        return TransferMethod.OVERBOOKING.equals(method);
+    }
+
+    @Override
+    public NcbsResponse execute(Transferable item) {
+
+        String refId = UUID.randomUUID().toString();
+
+        OverbookingRequest req = new OverbookingRequest();
+        req.setDebitAccount(item.getDebitAccount());
+        req.setCreditAccount(item.getCreditAccount());
+        req.setAmount(item.getAmount());
+        req.setRemark(item.getDescription());
+
+        NcbsRequest ncbsReq = createRequest(item, MiddlewareServiceType.OVERBOOKING_CASA, refId);
+        requestRepository.save(ncbsReq);
+
+        OverbookingResponse res = middleware.overbooking(refId, req);
+
+        NcbsResponse ncbsRes = createResponse(ncbsReq, res);
+        responseRepository.save(ncbsRes);
+
+        return ncbsRes;
+    }
+}
+```
+
+## 7. TransferOrchestratorService
+
+```java
+@Service
+public class TransferOrchestratorService {
+
+    private final List<TransferExecutor> executors;
+
+    public TransferOrchestratorService(List<TransferExecutor> executors) {
+        this.executors = executors;
+    }
+
+    public <T extends Transferable> ProcessResult process(List<T> items) {
+
+        ProcessResult result = new ProcessResult();
+
+        for (T item : items) {
+
+            try {
+
+                TransferExecutor executor = null;
+
+                for (TransferExecutor e : executors) {
+                    if (e.supports(item.getTransferMethod())) {
+                        executor = e;
+                        break;
+                    }
+                }
+
+                if (executor == null) {
+                    throw new IllegalStateException("No executor found");
+                }
+
+                executor.execute(item);
+
+                result.addSuccess();
+
+            } catch (Exception e) {
+
+                result.addError(
+                        ErrorDetail.of(
+                                "id",
+                                String.valueOf(item.getId()),
+                                Collections.singletonList(e.getMessage())
+                        )
+                );
+            }
+        }
+
+        return result;
+    }
+}
+```
+
+## 8. Service ManagementFee
+
+```java
+@Service
+public class ManagementFeeMapService {
+
+    private final ManagementFeeMapRepository repo;
+    private final TransferableMapper mapper;
+    private final TransferOrchestratorService orchestrator;
+
+    public ManagementFeeMapService(ManagementFeeMapRepository repo,
+                                   TransferableMapper mapper,
+                                   TransferOrchestratorService orchestrator) {
+        this.repo = repo;
+        this.mapper = mapper;
+        this.orchestrator = orchestrator;
+    }
+
+    public ProcessResult send(List<Long> ids) {
+
+        List<ManagementFeeMap> data = repo.findAllById(ids);
+
+        List<Transferable> list = new ArrayList<Transferable>();
+
+        for (ManagementFeeMap e : data) {
+            list.add(mapper.fromManagementFee(e));
+        }
+
+        return orchestrator.process(list);
+    }
+}
+```
+## 9. Service TaxBrokerFee
+
+```java
+@Service
+public class TaxBrokerFeeService {
+
+    private final TaxBrokerFeeRepository repo;
+    private final TransferableMapper mapper;
+    private final TransferOrchestratorService orchestrator;
+
+    public TaxBrokerFeeService(TaxBrokerFeeRepository repo,
+                               TransferableMapper mapper,
+                               TransferOrchestratorService orchestrator) {
+        this.repo = repo;
+        this.mapper = mapper;
+        this.orchestrator = orchestrator;
+    }
+
+    public ProcessResult send(List<Long> ids) {
+
+        List<TaxBrokerFee> data = repo.findAllById(ids);
+
+        List<Transferable> list = new ArrayList<Transferable>();
+
+        for (TaxBrokerFee e : data) {
+            list.add(mapper.fromTaxBroker(e));
+        }
+
+        return orchestrator.process(list);
+    }
+}
+```
