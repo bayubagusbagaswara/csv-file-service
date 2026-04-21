@@ -4,11 +4,13 @@ import com.bayu.csvfileservice.dto.ErrorDetail;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.managementfee.CreateTransactionRequest;
 import com.bayu.csvfileservice.exception.DataNotFoundException;
+import com.bayu.csvfileservice.executor.TransferOrchestratorService;
+import com.bayu.csvfileservice.executor.Transferable;
+import com.bayu.csvfileservice.executor.TransferableMapper;
 import com.bayu.csvfileservice.model.*;
 import com.bayu.csvfileservice.model.enumerator.*;
 import com.bayu.csvfileservice.repository.*;
 import com.bayu.csvfileservice.service.ManagementFeeMapService;
-import com.bayu.csvfileservice.service.ResponseCodeService;
 import com.bayu.csvfileservice.util.BankCodeHelper;
 import com.bayu.csvfileservice.util.TransferMethodValidator;
 import lombok.RequiredArgsConstructor;
@@ -16,10 +18,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -34,17 +35,18 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
     private final NcbsResponseRepository ncbsResponseRepository;
     private final BankCodeHelper bankHelper;
     private final TransferMethodValidator validator;
-    private final ResponseCodeService responseCodeService;
+    private final ResponseCodeRepository responseCodeRepository;
+    private final TransactionLimitRepository transactionLimitRepository;
+    private final TransferableMapper transferableMapper;
+    private final TransferOrchestratorService orchestratorService;
+
 
     @Override
     @Transactional
-    public ProcessResult map(Month month, Integer year) {
-
+    public ProcessResult map(Month month, Integer year, String clientIp) {
         ProcessResult result = new ProcessResult();
 
-        // Replace strategy
-        //todo: apakah harusnya ini ada tambahan kondisi ya? karena data Map bisa jadi emang sudah pernah dijalankan (kirim ke Middleware)
-        mapRepository.deleteByMonthAndYear(month, year);
+        mapRepository.deleteByMonthAdnYearAndStatus(month, year, MappingStatus.DRAFT);
 
         List<ManagementFeeRaw> feeRawList = rawRepository.findAllByMonthAndYear(month, year);
 
@@ -56,6 +58,14 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
         for (ManagementFeeRaw raw : feeRawList) {
             try {
                 validateRaw(raw);
+
+                // ================= Check by Reference Combination ===============
+                if (mapRepository.existsByReferenceCombination(raw.getReferenceCombination())) {
+                    throw new IllegalStateException(
+                            "ManagementFee has been mapped with fundCode " + raw.getFundCode() + ", month " + raw.getMonth().getLabel()
+                            + ", year " + raw.getYear() + ", amount " + raw.getAmount()
+                    );
+                }
 
                 // ================= SPLIT BANK =================
                 String rawCode = raw.getBankCode();
@@ -71,7 +81,6 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
 
                 // ================= TRANSFER SCOPE =================
                 TransferScope scope = bankHelper.resolveScope(branchCode);
-
 
                 // ================= DEBIT ACCOUNT =================
                 DebitAccountProduct dap = debitRepository.findByFundCode(raw.getFundCode())
@@ -100,7 +109,6 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
                         .biCode(bank.getBiCode())
                         .transferScope(scope)
                         .debitAccount(dap.getCashAccount())
-
                         .status(MappingStatus.DRAFT)
                         .referenceCombination(raw.getReferenceCombination())
                         .build();
@@ -122,84 +130,104 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
 
     @Override
     @Transactional
-    public ProcessResult createTransactions(List<CreateTransactionRequest> requests) {
+    public ProcessResult createTransactions(List<CreateTransactionRequest> items, String clientIp) {
         ProcessResult result = new ProcessResult();
-
-        for (CreateTransactionRequest req : requests) {
-
+        for (CreateTransactionRequest item : items) {
             try {
-
-                ManagementFeeMap item = mapRepository.findById(req.getId())
+                ManagementFeeMap entity = mapRepository.findById(item.getId())
                         .orElseThrow(() -> new IllegalArgumentException("Data not found"));
 
-                if (item.getStatus() != MappingStatus.DRAFT) {
+                if (entity.getStatus() != MappingStatus.DRAFT) {
                     throw new IllegalStateException("Only DRAFT data can be processed");
                 }
 
                 // VALIDASI METHOD
                 validator.validate(
-                        item.getTransferScope(),
-                        req.getTransferMethod()
+                        entity.getTransferScope(),
+                        item.getTransferMethod()
                 );
 
-                item.setTransferMethod(req.getTransferMethod());
-                item.setStatus(MappingStatus.READY);
+                // =============== Check range amount ===============
+                BigDecimal amount = entity.getAmount();
+                TransactionLimit transactionLimit = transactionLimitRepository.findByTransferMethod(item.getTransferMethod())
+                        .orElseThrow(() -> new DataNotFoundException("Transfer method " + item.getTransferMethod().getName() + " is not defined"));
+                if (amount.compareTo(transactionLimit.getMinAmount()) < 0
+                        || amount.compareTo(transactionLimit.getMaxAmount()) > 0) {
+                    throw new IllegalArgumentException("Amount " + amount + " is out of range for transfer method " + item.getTransferMethod().getName());
+                }
 
-                mapRepository.save(item);
+                // =============== Set Transfer Method to Entity ================
+                entity.setTransferMethod(item.getTransferMethod());
+                entity.setStatus(MappingStatus.READY);
 
+                // =============== Save entity ==================
+                mapRepository.save(entity);
                 result.addSuccess();
 
             } catch (Exception e) {
-
                 result.addError(
                         ErrorDetail.of(
                                 "id",
-                                String.valueOf(req.getId()),
+                                String.valueOf(item.getId()),
                                 List.of(e.getMessage())
                         )
                 );
             }
         }
-
         return result;
-
     }
 
     @Override
-    public ProcessResult sendTransactions(List<Long> ids) {
+    public ProcessResult sendTransactions(List<Long> ids, String clientIp) {
         ProcessResult result = new ProcessResult();
         List<ManagementFeeMap> list = mapRepository.findAllById(ids);
 
-        for (ManagementFeeMap item : list) {
+        for (ManagementFeeMap entity : list) {
             try {
-                validateSend(item);
+                // ============= VALIDATION ==================
+                if (!MappingStatus.READY.equals(entity.getStatus())
+                        && !MappingStatus.RETRY.equals(entity.getStatus())) {
+                    throw new IllegalStateException("Data with id " + entity.getId() + " cannot be sent");
+                }
 
-                // Execute transfer
-                NcbsResponse response = routeTransferExecution(item);
-
-                // ================= UPDATE MAP =================
-                item.setStatus(MappingStatus.SENT);
-                item.setReferenceId(response.getReferenceId());
-                item.setLastSentDate(LocalDateTime.now());
-                item.setRetryCount(
-                        item.getRetryCount() == null ? 1 : item.getRetryCount() + 1
+                // ================= Set SENT =============
+                entity.setStatus(MappingStatus.SENT);
+                entity.setLastSentDate(LocalDateTime.now());
+                entity.setRetryCount(
+                        entity.getRetryCount() == null ? 1 : entity.getRetryCount() + 1
                 );
 
-                mapRepository.save(item);
+                mapRepository.save(entity);
 
-                // ================= UPDATE STATUS =================
-                updateStatus(item, response);
+                // ============= EXECUTE ==================
+                Transferable transferable = transferableMapper.fromManagementFeeMap(entity);
+                log.info("ManagementFeeMapService transferableMapper fromManagementFeeMap: {}", transferable);
+
+                NcbsResponse ncbsResponse = orchestratorService.execute(transferable);
+                log.info("ManagementFeeMapService orchestratorService execute: {}", ncbsResponse);
+
+                // =========== Set referenceId to entity ===========
+                entity.setReferenceId(ncbsResponse.getReferenceId());
+
+                if (ncbsResponse.getResponseCode().equalsIgnoreCase(ApiResponseCode.SUCCESS.getCode())) {
+                     entity.setStatus(MappingStatus.SUCCESS);
+                } else if (checkIfInsufficientBalance(ncbsResponse.getResponseCode())) {
+                    entity.setStatus(MappingStatus.RETRY);
+                } else {
+                    entity.setStatus(MappingStatus.FAILED);
+                }
+
+                // ============ Save entity to update status ===============
+                mapRepository.save(entity);
                 result.addSuccess();
 
             } catch (Exception e) {
-                log.error("Send failed id {}", item.getId(), e);
-                item.setStatus(MappingStatus.FAILED);
-                mapRepository.save(item);
+                log.error("Send failed id {}", entity.getId(), e);
                 result.addError(
                         ErrorDetail.of(
                                 "id",
-                                String.valueOf(item.getId()),
-                                List.of("Send failed")
+                                String.valueOf(entity.getId()),
+                                List.of("Send failed " + e.getMessage())
                         )
                 );
             }
@@ -207,115 +235,9 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
         return result;
     }
 
-    // ======================= ROUTER ======================
-    private NcbsResponse routeTransferExecution(ManagementFeeMap item) {
-        return switch (item.getTransferScope()) {
-            case INTERNAL -> executeInternalTransfer(item);
-            case EXTERNAL -> executeExternalTransfer(item);
-        };
-    }
-
-    // ======================= INTERNAL =====================
-    private NcbsResponse executeInternalTransfer(ManagementFeeMap item) {
-        if (item.getTransferMethod() != TransferMethod.OVERBOOKING) {
-            throw new IllegalArgumentException("Internal transfer must use OVERBOOKING");
-        }
-        return executeOverbookingTransferr(item);
-    }
-
-    // ======================= EXTERNAL =====================
-    private NcbsResponse executeExternalTransfer(ManagementFeeMap item) {
-        return switch (item.getTransferMethod()) {
-            case BI_FAST -> executeBiFastTransfer(item);
-            case SKN, RTGS -> executeSknRtgsTransfer(item);
-            case OVERBOOKING ->
-                throw new IllegalArgumentException("External transfer cannot use OVERBOOKING");
-            default -> throw new IllegalStateException("Unsupported transfer method");
-        };
-    }
-
-    // ======================= OVERBOOKING ========================
-    private NcbsResponse executeOverbookingTransfer(ManagementFeeMap item) {
-        NcbsRequest request = buildNcbsRequestPayload(
-                item, MiddlewareServiceType.OVERBOOKING_CASA
-        );
-        ncbsRequestRepository.save(request);
-        NcbsResponse response = invokeOverbookingMiddleware(request);
-        ncbsResponseRepository.save(response);
-        return response;
-    }
-
-    // ======================= BI-FAST =======================
-
-    private NcbsResponse executeBiFastTransfer(ManagementFeeMap item) {
-
-        NcbsRequest request = buildNcbsRequestPayload(
-                item,
-                MiddlewareServiceType.TRANSFER_SKN_RTGS
-        );
-
-        requestRepository.save(request);
-
-        NcbsResponse response = invokeBiFastMiddleware(request);
-
-        responseRepository.save(response);
-
-        return response;
-    }
-
-    // ======================= SKN / RTGS =======================
-
-    private NcbsResponse executeSknRtgsTransfer(ManagementFeeMap item) {
-
-        NcbsRequest request = buildNcbsRequestPayload(
-                item,
-                MiddlewareServiceType.TRANSFER_SKN_RTGS
-        );
-
-        requestRepository.save(request);
-
-        NcbsResponse response = invokeSknRtgsMiddleware(request);
-
-        responseRepository.save(response);
-
-        return response;
-    }
-
-    // ======================= BUILD REQUEST =======================
-
-    private NcbsRequest buildNcbsRequestPayload(
-            ManagementFeeMap item,
-            MiddlewareServiceType service
-    ) {
-
-        return NcbsRequest.builder()
-                .referenceId(UUID.randomUUID().toString())
-                .entityId(item.getId())
-                .createdDate(LocalDateTime.now())
-                .transferScope(item.getTransferScope())
-                .transferMethod(item.getTransferMethod())
-                .service(service)
-                .build();
-    }
-
-    // ======================= MIDDLEWARE =======================
-
-    private NcbsResponse invokeOverbookingMiddleware(NcbsRequest request) {
-        return middlewareService.callOverbooking(request);
-    }
-
-    private NcbsResponse invokeBiFastMiddleware(NcbsRequest request) {
-        return middlewareService.callBiFast(request);
-    }
-
-    private NcbsResponse invokeSknRtgsMiddleware(NcbsRequest request) {
-        return middlewareService.callSknRtgs(request);
-    }
-
     // ======================= HELPER =======================
 
     private void validateRaw(ManagementFeeRaw raw) {
-
         if (raw.getBankCode() == null || raw.getBankCode().length() < 7) {
             throw new IllegalArgumentException("Invalid bankCode format");
         }
@@ -326,38 +248,11 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
     }
 
 
-    private void validateSend(ManagementFeeMap item) {
-        if (!List.of(MappingStatus.READY, MappingStatus.RETRY).contains(item.getStatus())) {
-            throw new IllegalStateException("Data with id " + item.getId() + " cannot be sent");
-        }
-    }
-
-    private MiddlewareServiceType resolveService(ManagementFeeMap item) {
-
-        return item.getTransferMethod() == TransferMethod.OVERBOOKING
-                ? MiddlewareServiceType.OVERBOOKING_CASA
-                : MiddlewareServiceType.TRANSFER_SKN_RTGS;
-    }
-
-    private NcbsResponse simulateResponse(NcbsRequest request) {
-
-        // TODO: replace with real integration
-        return NcbsResponse.builder()
-                .referenceId(request.getReferenceId())
-                .createdDate(LocalDateTime.now())
-                .ncbsStatus(NcbsStatus.SUCCESS)
-                .build();
-    }
-
-    private void updateStatus(ManagementFeeMap item, NcbsResponse response) {
-        if (response.getNcbsStatus() == NcbsStatus.SUCCESS) {
-            item.setStatus(MappingStatus.SUCCESS);
-        } else if (responseCodeService.isInsufficientBalance(response.getResponseCode())) {
-            item.setStatus(MappingStatus.RETRY);
-        } else {
-            item.setStatus(MappingStatus.FAILED);
-        }
-        mapRepository.save(item);
+    private boolean checkIfInsufficientBalance(String responseCode) {
+        List<String> list = responseCodeRepository.findAllByName(NcbsStatus.INSUFFICIENT_BALANCE.name()).stream()
+                .map(ResponseCode::getCode)
+                .toList();
+        return list.contains(responseCode);
     }
 
 }
