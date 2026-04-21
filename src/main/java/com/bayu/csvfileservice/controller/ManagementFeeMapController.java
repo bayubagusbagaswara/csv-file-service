@@ -5,6 +5,8 @@ import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.managementfee.CreateTransactionRequest;
 import com.bayu.csvfileservice.model.enumerator.Month;
 import com.bayu.csvfileservice.service.ManagementFeeMapService;
+import com.bayu.csvfileservice.util.ClientIpUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -24,30 +26,34 @@ public class ManagementFeeMapController {
     @PostMapping("/map")
     public ResponseEntity<ApiResponse<ProcessResult>> map(
             @RequestParam String month,
-            @RequestParam Integer year
+            @RequestParam Integer year,
+            HttpServletRequest servletRequest
     ) {
+        String clientIp = ClientIpUtil.getClientIp(servletRequest);
         Month monthEnum = parseMonth(month);
-        ProcessResult result = service.map(monthEnum, year);
+        ProcessResult result = service.map(monthEnum, year, clientIp);
         return buildResponse(result);
     }
 
     // ================= CREATE TRANSACTION =================
-
-    @PostMapping("/map/create-transaction")
-    public ResponseEntity<ApiResponse<ProcessResult>> createTransaction(
-            @RequestBody List<CreateTransactionRequest> requests
+    @PostMapping("/map/create-transactions")
+    public ResponseEntity<ApiResponse<ProcessResult>> createTransactions(
+            @RequestBody List<CreateTransactionRequest> requests,
+            HttpServletRequest servletRequest
     ) {
-        ProcessResult result = service.createTransaction(requests);
+        String clientIp = ClientIpUtil.getClientIp(servletRequest);
+        ProcessResult result = service.createTransactions(requests, clientIp);
         return buildResponse(result);
     }
 
     // ======================= SEND =======================
-
-    @PostMapping("/map/send")
-    public ResponseEntity<ApiResponse<ProcessResult>> send(
-            @RequestBody List<Long> ids
+    @PostMapping("/map/send-transactions")
+    public ResponseEntity<ApiResponse<ProcessResult>> sendTransactions(
+            @RequestBody List<Long> ids,
+            HttpServletRequest servletRequest
     ) {
-        ProcessResult result = service.send(ids);
+        String clientIp = ClientIpUtil.getClientIp(servletRequest);
+        ProcessResult result = service.sendTransactions(ids, clientIp);
         return buildResponse(result);
     }
 
