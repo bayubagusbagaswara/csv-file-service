@@ -24,7 +24,7 @@ import java.util.List;
 @RequestMapping(path = "/api/management-fee")
 @Slf4j
 @RequiredArgsConstructor
-public class ManagementFeeController {
+public class ManagementFeeRawController {
 
     private static final String BASE_URL_MANAGEMENT_FEE = "/api/management-fee";
     private static final String MENU_MANAGEMENT_FEE = "Management Fee";
