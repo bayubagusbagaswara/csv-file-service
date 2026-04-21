@@ -5,9 +5,9 @@ import lombok.Getter;
 @Getter
 public enum FeatureType {
 
-    DEPOSIT_TRANSFER,
+    PLACEMENT_DEPOSIT_TRANSFER,
     MANAGEMENT_FEE,
-    TAX_PAYMENT,
+    TAX_BROKER_FEE,
     STOCK_PURCHASE
 
 }
