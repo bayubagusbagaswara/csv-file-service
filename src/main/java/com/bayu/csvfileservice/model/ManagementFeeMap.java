@@ -26,6 +26,7 @@ public class ManagementFeeMap extends BaseApproval {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Enumerated(EnumType.STRING)
     private Month month;
 
     private Integer year;
@@ -55,6 +56,7 @@ public class ManagementFeeMap extends BaseApproval {
     private String description;
 
     private String bankCode;
+
     private String branchCode;
 
     private String biCode;
