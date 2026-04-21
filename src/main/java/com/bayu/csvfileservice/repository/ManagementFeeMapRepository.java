@@ -9,7 +9,7 @@ public interface ManagementFeeMapRepository extends JpaRepository<ManagementFeeM
 
     void deleteByMonthAndYear(Month month, Integer year);
 
-    void deleteByMonthAdnYearAndStatus(Month month, Integer year, MappingStatus status);
+    void deleteByMonthAndYearAndStatus(Month month, Integer year, MappingStatus status);
 
     boolean existsByReferenceCombination(String referenceCombination);
 
