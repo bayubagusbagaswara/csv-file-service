@@ -8,10 +8,10 @@ import java.util.List;
 
 public interface ManagementFeeMapService {
 
-    ProcessResult map(Month month, Integer year);
+    ProcessResult map(Month monthEnum, Integer year, String clientIp);
 
-    ProcessResult createTransactions(List<CreateTransactionRequest> requests);
+    ProcessResult createTransactions(List<CreateTransactionRequest> requests, String clientIp);
 
-    ProcessResult sendTransactions(List<Long> ids);
+    ProcessResult sendTransactions(List<Long> ids, String clientIp);
 
 }
