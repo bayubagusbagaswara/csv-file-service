@@ -8,12 +8,16 @@ import org.springframework.stereotype.Component;
 public class TransferMethodValidator {
 
     public void validate(TransferScope scope, TransferMethod method) {
-        if (scope == TransferScope.INTERNAL && method != TransferMethod.OVERBOOKING) {
-            throw new IllegalArgumentException("INTERNAL must be OVERBOOKING");
+        boolean isOverbooking =
+                method == TransferMethod.OVERBOOKING_CASA_TO_CASA
+                        || method == TransferMethod.OVERBOOKING_CASA_TO_GL;
+
+        if (scope == TransferScope.INTERNAL && !isOverbooking) {
+            throw new IllegalArgumentException("INTERNAL can only user OVERBOOKING_CASA_TO_CASA or OVERBOOKING_CASA_TO_GL");
         }
 
-        if (scope == TransferScope.EXTERNAL && method == TransferMethod.OVERBOOKING) {
-            throw new IllegalArgumentException("EXTERNAL cannot OVERBOOKING");
+        if (scope == TransferScope.EXTERNAL && isOverbooking) {
+            throw new IllegalArgumentException("EXTERNAL may not use OVERBOOKING");
         }
     }
 
