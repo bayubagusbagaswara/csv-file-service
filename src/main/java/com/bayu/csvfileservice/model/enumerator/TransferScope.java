@@ -5,21 +5,23 @@ import lombok.Getter;
 @Getter
 public enum TransferScope {
 
-    INTERNAL,
-    EXTERNAL;
+    INTERNAL("Internal"),
+    EXTERNAL("External")
+    ;
 
-    public boolean isValidMethod(TransferMethod method) {
-        if (this == INTERNAL) {
-            return method == TransferMethod.OVERBOOKING;
-        }
-        if (this == EXTERNAL) {
-            return method != TransferMethod.OVERBOOKING;
-        }
-        return false;
+    private final String name;
+
+    TransferScope(String name) {
+        this.name = name;
     }
 
-    // CONTOH PEMAKAIAN
-//    if (!transferScope.isValidMethod(transferMethod)) {
-//        throw new IllegalArgumentException("Kombinasi transfer tidak valid");
-//    }
+    public static TransferScope fromName(String name) {
+        for (TransferScope value : values()) {
+            if (value.name.equalsIgnoreCase(name)) {
+                return value;
+            }
+        }
+        throw new IllegalArgumentException("Invalid transfer scope: " + name);
+    }
+
 }
