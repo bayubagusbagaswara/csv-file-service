@@ -46,7 +46,7 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
     public ProcessResult map(Month month, Integer year, String clientIp) {
         ProcessResult result = new ProcessResult();
 
-        mapRepository.deleteByMonthAdnYearAndStatus(month, year, MappingStatus.DRAFT);
+        mapRepository.deleteByMonthAndYearAndStatus(month, year, MappingStatus.DRAFT);
 
         List<ManagementFeeRaw> feeRawList = rawRepository.findAllByMonthAndYear(month, year);
 
