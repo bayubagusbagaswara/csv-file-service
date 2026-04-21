@@ -1,10 +1,8 @@
 package com.bayu.csvfileservice.model;
 
+import com.bayu.csvfileservice.executor.Transferable;
 import com.bayu.csvfileservice.model.base.BaseApproval;
-import com.bayu.csvfileservice.model.enumerator.MappingStatus;
-import com.bayu.csvfileservice.model.enumerator.Month;
-import com.bayu.csvfileservice.model.enumerator.TransferMethod;
-import com.bayu.csvfileservice.model.enumerator.TransferScope;
+import com.bayu.csvfileservice.model.enumerator.*;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -20,7 +18,7 @@ import java.time.LocalDateTime;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ManagementFeeMap extends BaseApproval {
+public class ManagementFeeMap extends BaseApproval implements Transferable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -77,4 +75,15 @@ public class ManagementFeeMap extends BaseApproval {
     private LocalDateTime lastSentDate;
 
     private String referenceCombination;
+
+    @Override
+    public ProcessType getProcessType() {
+        return ProcessType.SINGLE;
+    }
+
+    @Override
+    public FeatureType getFeatureType() {
+        return FeatureType.MANAGEMENT_FEE;
+    }
+
 }
