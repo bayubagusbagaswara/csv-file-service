@@ -4,4 +4,7 @@ import com.bayu.csvfileservice.model.NcbsRequest;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface NcbsRequestRepository extends JpaRepository<NcbsRequest, Long> {
+
+    boolean existsByReferenceId(String referenceId);
+
 }
