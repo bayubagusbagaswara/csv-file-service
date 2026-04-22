@@ -57,4 +57,9 @@ public class NcbsRequest {
     @Enumerated(EnumType.STRING)
     private ProcessType processType;
 
+    // ============= OLD FIELD ================
+    private String payUserRefNo;
+
+    private String siReferenceId;
+
 }
