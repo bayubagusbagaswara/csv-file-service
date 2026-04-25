@@ -6,10 +6,10 @@ import lombok.Getter;
 public enum MappingStatus {
 
     DRAFT,
+    HOLD,
     READY,
     SENT,
     SUCCESS,
     FAILED,
     RETRY
-
 }
