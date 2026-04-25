@@ -1,6 +1,7 @@
 package com.bayu.csvfileservice.model;
 
 import com.bayu.csvfileservice.model.base.BaseApproval;
+import com.bayu.csvfileservice.model.enumerator.MappingStatus;
 import com.bayu.csvfileservice.model.enumerator.TransferMethod;
 import com.bayu.csvfileservice.model.enumerator.TransferScope;
 import jakarta.persistence.*;
@@ -12,6 +13,7 @@ import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * PlacementData
@@ -23,46 +25,34 @@ import java.time.LocalDate;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class PlacementDepositMapData extends BaseApproval {
+public class DepositTransferMap extends BaseApproval {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private String imCode;
-
     private String imName;
-
     private String fundCode;
-
     private String fundName;
-
     private String bankCode;
-
     private String bankName;
-
     private String cashAccountName;
-
     private String cashAccountNo;
-
     private String currency;
 
     private BigDecimal principle;
 
     private LocalDate placementDate;
 
-    private String referenceNo;
-
+    @Column(name = "si_reference_id", nullable = false, length = 100)
     private String siReferenceId;
 
     private String accountDebitNo;
-
     private String productCode;
 
     private String biCode;
-
     private String bankType;
-
     private String branchCode;
 
     private String description;
@@ -73,10 +63,13 @@ public class PlacementDepositMapData extends BaseApproval {
     @Enumerated(EnumType.STRING)
     private TransferMethod transferMethod;
 
-    private String placementApprovalId;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "mapping_status")
+    private MappingStatus mappingStatus;
 
-    private String placementApprovalStatus;
+    private String referenceId;
+    private Integer retryCount;
+    private LocalDateTime lastSentDate;
 
     private String releaseId;
-
 }
