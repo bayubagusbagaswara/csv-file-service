@@ -2,10 +2,7 @@ package com.bayu.csvfileservice.service.impl;
 
 import com.bayu.csvfileservice.dto.ErrorDetail;
 import com.bayu.csvfileservice.dto.ProcessResult;
-import com.bayu.csvfileservice.dto.deposittransfer.CreateDepositTransferTransactionRequest;
-import com.bayu.csvfileservice.dto.deposittransfer.DepositTransferBulkRequest;
-import com.bayu.csvfileservice.dto.deposittransfer.ReleaseDepositTransferHoldRequest;
-import com.bayu.csvfileservice.dto.deposittransfer.SInvestRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.*;
 import com.bayu.csvfileservice.executor.TransferOrchestratorService;
 import com.bayu.csvfileservice.executor.Transferable;
 import com.bayu.csvfileservice.executor.TransferableMapper;
@@ -13,8 +10,12 @@ import com.bayu.csvfileservice.mapper.DepositTransferMapper;
 import com.bayu.csvfileservice.model.*;
 import com.bayu.csvfileservice.model.enumerator.ApiResponseCode;
 import com.bayu.csvfileservice.model.enumerator.MappingStatus;
+import com.bayu.csvfileservice.model.enumerator.ProcessType;
 import com.bayu.csvfileservice.model.enumerator.TransferScope;
-import com.bayu.csvfileservice.repository.*;
+import com.bayu.csvfileservice.repository.DebitAccountProductRepository;
+import com.bayu.csvfileservice.repository.DepositTransferMapRepository;
+import com.bayu.csvfileservice.repository.MasterBankRepository;
+import com.bayu.csvfileservice.repository.SInvestRepository;
 import com.bayu.csvfileservice.service.DepositTransferService;
 import com.bayu.csvfileservice.service.ResponseCodeService;
 import com.bayu.csvfileservice.util.TransferMethodValidator;
@@ -24,10 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -44,6 +42,272 @@ public class DepositTransferServiceImpl implements DepositTransferService {
     private final TransferableMapper transferableMapper;
     private final TransferOrchestratorService transferOrchestratorService;
     private final ResponseCodeService responseCodeService;
+
+    @Override
+    @Transactional
+    public ProcessResult createSingleTransaction(CreateDepositTransferSingleRequest request) {
+
+        ProcessResult result = new ProcessResult();
+
+        try {
+            DepositTransferMap entity = depositTransferMapRepository.findById(request.getId())
+                    .orElseThrow(() -> new IllegalArgumentException("DepositTransferMap not found"));
+
+            if (!MappingStatus.DRAFT.equals(entity.getMappingStatus())) {
+                throw new IllegalStateException("Only DRAFT data can create single transaction");
+            }
+
+            transferMethodValidator.validate(
+                    entity.getTransferScope(),
+                    request.getTransferMethod()
+            );
+
+            entity.setTransferMethod(request.getTransferMethod());
+            entity.setProcessType(ProcessType.SINGLE);
+            entity.setBulkReferenceId(null);
+            entity.setBulkSiReferenceIds(null);
+            entity.setMappingStatus(MappingStatus.READY);
+
+            depositTransferMapRepository.save(entity);
+
+            result.addSuccess();
+
+        } catch (Exception e) {
+            log.error("Failed create single transaction id {}", request.getId(), e);
+
+            result.addError(ErrorDetail.of(
+                    "id",
+                    String.valueOf(request.getId()),
+                    Collections.singletonList(e.getMessage())
+            ));
+        }
+
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public ProcessResult createBulkTransaction(CreateDepositTransferBulkRequest request) {
+
+        ProcessResult result = new ProcessResult();
+
+        try {
+            List<DepositTransferMap> list = depositTransferMapRepository.findAllById(request.getIds());
+
+            if (list.size() != request.getIds().size()) {
+                throw new IllegalArgumentException("Some DepositTransferMap data not found");
+            }
+
+            validateBulkCandidates(list);
+
+            DepositTransferMap first = list.get(0);
+
+            transferMethodValidator.validate(
+                    first.getTransferScope(),
+                    request.getTransferMethod()
+            );
+
+            String bulkReferenceId = UUID.randomUUID().toString();
+            String joinedSiReferenceIds = buildJoinedSiReferenceIds(list);
+
+            for (DepositTransferMap entity : list) {
+                entity.setTransferMethod(request.getTransferMethod());
+                entity.setProcessType(ProcessType.BULK);
+                entity.setBulkReferenceId(bulkReferenceId);
+                entity.setBulkSiReferenceIds(joinedSiReferenceIds);
+                entity.setMappingStatus(MappingStatus.READY);
+
+                depositTransferMapRepository.save(entity);
+            }
+
+            result.addSuccess();
+
+        } catch (Exception e) {
+            log.error("Failed create bulk transaction ids {}", request.getIds(), e);
+
+            result.addError(ErrorDetail.of(
+                    "ids",
+                    String.valueOf(request.getIds()),
+                    Collections.singletonList(e.getMessage())
+            ));
+        }
+
+        return result;
+    }
+
+    private void processSingleSend(DepositTransferMap entity, ProcessResult result) {
+
+        try {
+            validateSendStatus(entity);
+
+            entity.setMappingStatus(MappingStatus.SENT);
+            entity.setLastSentDate(LocalDateTime.now());
+            entity.setRetryCount(entity.getRetryCount() == null ? 1 : entity.getRetryCount() + 1);
+
+            depositTransferMapRepository.save(entity);
+
+            Transferable transferable = transferableMapper.fromDepositTransferMap(entity);
+
+            NcbsResponse response = transferOrchestratorService.execute(transferable);
+
+            entity.setReferenceId(response.getReferenceId());
+
+            applyResponseStatus(entity, response);
+
+            depositTransferMapRepository.save(entity);
+
+            result.addSuccess();
+
+        } catch (Exception e) {
+            log.error("Failed send single deposit transfer id {}", entity.getId(), e);
+
+            entity.setMappingStatus(MappingStatus.FAILED);
+            depositTransferMapRepository.save(entity);
+
+            result.addError(ErrorDetail.of(
+                    "id",
+                    String.valueOf(entity.getId()),
+                    Collections.singletonList(e.getMessage())
+            ));
+        }
+    }
+
+    private void processBulkSend(String bulkReferenceId, ProcessResult result) {
+
+        List<DepositTransferMap> bulkItems =
+                depositTransferMapRepository.findAllByBulkReferenceId(bulkReferenceId);
+
+        try {
+            validateBulkSendItems(bulkItems);
+
+            LocalDateTime now = LocalDateTime.now();
+
+            for (DepositTransferMap entity : bulkItems) {
+                entity.setMappingStatus(MappingStatus.SENT);
+                entity.setLastSentDate(now);
+                entity.setRetryCount(entity.getRetryCount() == null ? 1 : entity.getRetryCount() + 1);
+
+                depositTransferMapRepository.save(entity);
+            }
+
+            Transferable transferable = transferableMapper.fromDepositTransferBulk(bulkItems);
+
+            NcbsResponse response = transferOrchestratorService.execute(transferable);
+
+            for (DepositTransferMap entity : bulkItems) {
+                entity.setReferenceId(response.getReferenceId());
+                applyResponseStatus(entity, response);
+
+                depositTransferMapRepository.save(entity);
+            }
+
+            result.addSuccess();
+
+        } catch (Exception e) {
+            log.error("Failed send bulk deposit transfer bulkReferenceId {}", bulkReferenceId, e);
+
+            for (DepositTransferMap entity : bulkItems) {
+                entity.setMappingStatus(MappingStatus.FAILED);
+                depositTransferMapRepository.save(entity);
+            }
+
+            result.addError(ErrorDetail.of(
+                    "bulkReferenceId",
+                    bulkReferenceId,
+                    Collections.singletonList(e.getMessage())
+            ));
+        }
+    }
+
+    private void validateBulkCandidates(List<DepositTransferMap> list) {
+
+        if (list == null || list.isEmpty()) {
+            throw new IllegalArgumentException("Bulk data cannot be empty");
+        }
+
+        DepositTransferMap first = list.get(0);
+
+        for (DepositTransferMap item : list) {
+
+            if (!MappingStatus.DRAFT.equals(item.getMappingStatus())) {
+                throw new IllegalStateException("Only DRAFT data can be bulked");
+            }
+
+            if (!Objects.equals(first.getFundCode(), item.getFundCode())) {
+                throw new IllegalArgumentException("All fundCode must be same for bulk transaction");
+            }
+
+            if (!Objects.equals(first.getFundName(), item.getFundName())) {
+                throw new IllegalArgumentException("All fundName must be same for bulk transaction");
+            }
+
+            if (!Objects.equals(first.getTransferScope(), item.getTransferScope())) {
+                throw new IllegalArgumentException("All transferScope must be same for bulk transaction");
+            }
+
+            if (!Objects.equals(first.getBankCode(), item.getBankCode())) {
+                throw new IllegalArgumentException("All bankCode must be same for bulk transaction");
+            }
+
+            if (!Objects.equals(first.getCurrency(), item.getCurrency())) {
+                throw new IllegalArgumentException("All currency must be same for bulk transaction");
+            }
+        }
+    }
+
+    private void validateBulkSendItems(List<DepositTransferMap> bulkItems) {
+
+        if (bulkItems == null || bulkItems.isEmpty()) {
+            throw new IllegalArgumentException("Bulk data not found");
+        }
+
+        for (DepositTransferMap entity : bulkItems) {
+            validateSendStatus(entity);
+
+            if (!ProcessType.BULK.equals(entity.getProcessType())) {
+                throw new IllegalStateException("Invalid process type for bulk");
+            }
+        }
+    }
+
+    private void validateSendStatus(DepositTransferMap entity) {
+
+        if (!MappingStatus.READY.equals(entity.getMappingStatus())
+                && !MappingStatus.RETRY.equals(entity.getMappingStatus())) {
+
+            throw new IllegalStateException("Only READY or RETRY data can be sent");
+        }
+    }
+
+    private void applyResponseStatus(DepositTransferMap entity, NcbsResponse response) {
+
+        if (ApiResponseCode.SUCCESS.getCode().equals(response.getResponseCode())) {
+            entity.setMappingStatus(MappingStatus.SUCCESS);
+            return;
+        }
+
+        if (responseCodeService.isInsufficientBalance(response.getResponseCode())) {
+            entity.setMappingStatus(MappingStatus.RETRY);
+            return;
+        }
+
+        entity.setMappingStatus(MappingStatus.FAILED);
+    }
+
+    private String buildJoinedSiReferenceIds(List<DepositTransferMap> list) {
+
+        StringBuilder builder = new StringBuilder();
+
+        for (int i = 0; i < list.size(); i++) {
+            if (i > 0) {
+                builder.append(", ");
+            }
+
+            builder.append(list.get(i).getSiReferenceId());
+        }
+
+        return builder.toString();
+    }
 
     @Override
     @Transactional
@@ -161,46 +425,6 @@ public class DepositTransferServiceImpl implements DepositTransferService {
         return result;
     }
 
-    @Override
-    @Transactional
-    public ProcessResult createTransaction(List<CreateDepositTransferTransactionRequest> requests) {
-
-        ProcessResult result = new ProcessResult();
-
-        for (CreateDepositTransferTransactionRequest request : requests) {
-            try {
-                DepositTransferMap entity = depositTransferMapRepository.findById(request.getId())
-                        .orElseThrow(() -> new IllegalArgumentException("DepositTransferMap not found"));
-
-                if (!MappingStatus.DRAFT.equals(entity.getMappingStatus())) {
-                    throw new IllegalStateException("Only DRAFT data can create transaction");
-                }
-
-                transferMethodValidator.validate(
-                        entity.getTransferScope(),
-                        request.getTransferMethod()
-                );
-
-                entity.setTransferMethod(request.getTransferMethod());
-                entity.setMappingStatus(MappingStatus.READY);
-
-                depositTransferMapRepository.save(entity);
-
-                result.addSuccess();
-
-            } catch (Exception e) {
-                log.error("Failed create transaction id {}", request.getId(), e);
-
-                result.addError(ErrorDetail.of(
-                        "id",
-                        String.valueOf(request.getId()),
-                        Collections.singletonList(e.getMessage())
-                ));
-            }
-        }
-
-        return result;
-    }
 
     @Override
     @Transactional
