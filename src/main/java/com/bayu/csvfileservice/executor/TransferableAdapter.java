@@ -27,4 +27,7 @@ public class TransferableAdapter implements Transferable {
     private String biCode;
     private String branchCode;
 
+    private String bulkReferenceId;
+    private String siReferenceId;
+
 }
