@@ -2,7 +2,8 @@ package com.bayu.csvfileservice.controller;
 
 import com.bayu.csvfileservice.dto.ApiResponse;
 import com.bayu.csvfileservice.dto.ProcessResult;
-import com.bayu.csvfileservice.dto.deposittransfer.CreateDepositTransferTransactionRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.CreateDepositTransferBulkRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.CreateDepositTransferSingleRequest;
 import com.bayu.csvfileservice.dto.deposittransfer.DepositTransferBulkRequest;
 import com.bayu.csvfileservice.dto.deposittransfer.ReleaseDepositTransferHoldRequest;
 import com.bayu.csvfileservice.service.DepositTransferService;
@@ -35,11 +36,18 @@ public class DepositTransferController {
         return buildResponse(depositTransferService.map());
     }
 
-    @PostMapping("/create-transaction")
-    public ResponseEntity<ApiResponse<ProcessResult>> createTransaction(
-            @RequestBody List<CreateDepositTransferTransactionRequest> request
+    @PostMapping("/create-transaction/single")
+    public ResponseEntity<ApiResponse<ProcessResult>> createSingleTransaction(
+            @RequestBody CreateDepositTransferSingleRequest request
     ) {
-        return buildResponse(depositTransferService.createTransaction(request));
+        return buildResponse(depositTransferService.createSingleTransaction(request));
+    }
+
+    @PostMapping("/create-transaction/bulk")
+    public ResponseEntity<ApiResponse<ProcessResult>> createBulkTransaction(
+            @RequestBody CreateDepositTransferBulkRequest request
+    ) {
+        return buildResponse(depositTransferService.createBulkTransaction(request));
     }
 
     @PostMapping("/send-transaction")
@@ -65,4 +73,5 @@ public class DepositTransferController {
 
         return ResponseEntity.ok(response);
     }
+
 }
