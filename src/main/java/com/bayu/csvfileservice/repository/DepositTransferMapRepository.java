@@ -12,4 +12,7 @@ public interface DepositTransferMapRepository extends JpaRepository<DepositTrans
             String siReferenceId,
             List<MappingStatus> statuses
     );
+
+    List<DepositTransferMap> findAllByBulkReferenceId(String bulkReferenceId);
+
 }
