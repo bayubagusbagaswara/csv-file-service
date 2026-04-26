@@ -1,15 +1,15 @@
 package com.bayu.csvfileservice.executor;
 
 import com.bayu.csvfileservice.model.enumerator.*;
-import lombok.Builder;
-import lombok.Data;
-import lombok.ToString;
+import lombok.*;
 
 import java.math.BigDecimal;
 
 @ToString
 @Data
 @Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class TransferableAdapter implements Transferable {
 
     private Long id;
