@@ -1,5 +1,6 @@
 package com.bayu.csvfileservice.executor;
 
+import com.bayu.csvfileservice.model.DepositTransferMap;
 import com.bayu.csvfileservice.model.ManagementFeeMap;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -27,4 +28,19 @@ public class TransferableMapper {
         return adapter;
     }
 
+    public Transferable fromDepositTransferMap(DepositTransferMap e) {
+
+        TransferableAdapter dto = new TransferableAdapter();
+
+        dto.setId(e.getId());
+        dto.setDebitAccount(e.getAccountDebitNo());
+        dto.setCreditAccount(e.getCashAccountNo());
+        dto.setAmount(e.getPrinciple());
+        dto.setDescription(e.getDescription());
+        dto.setTransferMethod(e.getTransferMethod());
+        dto.setTransferScope(e.getTransferScope());
+
+
+        return dto;
+    }
 }
