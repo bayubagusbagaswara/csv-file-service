@@ -2318,3 +2318,26 @@ public class TaxBrokerFeeService {
     }
 }
 ```
+
+# Single and Bulk
+
+```bash
+SINGLE:
+1 DepositTransferMap
+→ createTransaction/single
+→ READY
+→ sendTransaction
+→ 1 request middleware
+
+BULK:
+5 DepositTransferMap
+→ createTransaction/bulk
+→ semua punya bulkReferenceId sama
+→ amount dijumlahkan
+→ siReferenceId digabung untuk informasi
+→ sendTransaction
+→ 1 request middleware
+→ response yang sama diterapkan ke semua item dalam bulkReferenceId
+
+```
+
