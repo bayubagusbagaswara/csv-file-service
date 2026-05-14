@@ -3,7 +3,6 @@ package com.bayu.csvfileservice.model;
 import com.bayu.csvfileservice.model.base.BaseApproval;
 import com.bayu.csvfileservice.model.enumerator.MappingStatus;
 import com.bayu.csvfileservice.model.enumerator.ProcessType;
-import com.bayu.csvfileservice.model.enumerator.TransferMethod;
 import com.bayu.csvfileservice.model.enumerator.TransferScope;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -89,14 +88,14 @@ public class DepositTransferMap extends BaseApproval {
     @Column(name = "description")
     private String description;
 
+    // ============= helper column for bulk transactions ===================
+    @Column(name = "bulk_reference_id")
+    private String bulkReferenceId;
+
     // ============ enumerator ======================
     @Enumerated(EnumType.STRING)
     @Column(name = "transfer_scope")
     private TransferScope transferScope;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "transfer_method")
-    private TransferMethod transferMethod;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "mapping_status")
@@ -105,23 +104,6 @@ public class DepositTransferMap extends BaseApproval {
     @Enumerated(EnumType.STRING)
     @Column(name = "process_type")
     private ProcessType processType;
-
-    // ============= referenceId for Middleware unique id, auto generate by system =============
-    @Column(name = "reference_id")
-    private String referenceId;
-
-    // ============= helper column for bulk transactions ===================
-    @Column(name = "bulk_reference_id")
-    private String bulkReferenceId;
-
-    @Column(name = "bulk_si_reference_ids", length = 1000)
-    private String bulkSiReferenceIds;
-
-    // ============= Helper column to count how many times a transaction was executed and when the transaction was last executed. =============
-    @Column(name = "retry_count")
-    private Integer retryCount;
-    @Column(name = "last_sent_date")
-    private LocalDateTime lastSentDate;
 
     // ============= helper column for storing user ID data that releases transactions with HOLD status. ===============
     @Column(name = "released_by")
