@@ -8,6 +8,9 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
+/**
+ * ini sama dengan DepositTransferMap, tetapi ada field tambahan yakni bulkSiReferenceIds dan bulkReferenceId
+ */
 @EqualsAndHashCode(callSuper = true)
 @Entity
 @Table
@@ -15,13 +18,19 @@ import lombok.experimental.SuperBuilder;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class DepositTransferBulk extends BaseApproval {
+public class DepositTransferTransaction extends BaseApproval {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "bulk_reference_id")
     private String bulkReferenceId;
+
+    @Column(name = "bulk_si_reference_ids", length = 2000)
+    private String bulkSiReferenceIds;
+
+
 
 
 }
