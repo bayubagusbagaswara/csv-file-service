@@ -62,10 +62,8 @@ public class DepositTransferServiceImpl implements DepositTransferService {
                     request.getTransferMethod()
             );
 
-            entity.setTransferMethod(request.getTransferMethod());
             entity.setProcessType(ProcessType.SINGLE);
             entity.setBulkReferenceId(null);
-            entity.setBulkSiReferenceIds(null);
             entity.setMappingStatus(MappingStatus.READY);
 
             depositTransferMapRepository.save(entity);
@@ -111,10 +109,8 @@ public class DepositTransferServiceImpl implements DepositTransferService {
             String joinedSiReferenceIds = buildJoinedSiReferenceIds(list);
 
             for (DepositTransferMap entity : list) {
-                entity.setTransferMethod(request.getTransferMethod());
                 entity.setProcessType(ProcessType.BULK);
                 entity.setBulkReferenceId(bulkReferenceId);
-                entity.setBulkSiReferenceIds(joinedSiReferenceIds);
                 entity.setMappingStatus(MappingStatus.READY);
 
                 depositTransferMapRepository.save(entity);
@@ -141,8 +137,8 @@ public class DepositTransferServiceImpl implements DepositTransferService {
             validateSendStatus(entity);
 
             entity.setMappingStatus(MappingStatus.SENT);
-            entity.setLastSentDate(LocalDateTime.now());
-            entity.setRetryCount(entity.getRetryCount() == null ? 1 : entity.getRetryCount() + 1);
+//            entity.setLastSentDate(LocalDateTime.now());
+//            entity.setRetryCount(entity.getRetryCount() == null ? 1 : entity.getRetryCount() + 1);
 
             depositTransferMapRepository.save(entity);
 
@@ -150,7 +146,7 @@ public class DepositTransferServiceImpl implements DepositTransferService {
 
             NcbsResponse response = transferOrchestratorService.execute(transferable);
 
-            entity.setReferenceId(response.getReferenceId());
+            //entity.setReferenceId(response.getReferenceId());
 
             applyResponseStatus(entity, response);
 
@@ -184,8 +180,8 @@ public class DepositTransferServiceImpl implements DepositTransferService {
 
             for (DepositTransferMap entity : bulkItems) {
                 entity.setMappingStatus(MappingStatus.SENT);
-                entity.setLastSentDate(now);
-                entity.setRetryCount(entity.getRetryCount() == null ? 1 : entity.getRetryCount() + 1);
+                //entity.setLastSentDate(now);
+                //entity.setRetryCount(entity.getRetryCount() == null ? 1 : entity.getRetryCount() + 1);
 
                 depositTransferMapRepository.save(entity);
             }
@@ -195,7 +191,7 @@ public class DepositTransferServiceImpl implements DepositTransferService {
             NcbsResponse response = transferOrchestratorService.execute(transferable);
 
             for (DepositTransferMap entity : bulkItems) {
-                entity.setReferenceId(response.getReferenceId());
+                //entity.setReferenceId(response.getReferenceId());
                 applyResponseStatus(entity, response);
 
                 depositTransferMapRepository.save(entity);
@@ -398,7 +394,7 @@ public class DepositTransferServiceImpl implements DepositTransferService {
                 depositTransferMap.setBranchCode(masterBank.getBranchCode());
 
                 depositTransferMap.setTransferScope(resolveTransferScope(sInvest.getBankCode()));
-                depositTransferMap.setRetryCount(0);
+                //depositTransferMap.setRetryCount(0);
 
                 if (duplicateInRaw || alreadyExistsAsReadyOrSent) {
                     depositTransferMap.setMappingStatus(MappingStatus.HOLD);
@@ -442,8 +438,8 @@ public class DepositTransferServiceImpl implements DepositTransferService {
                 }
 
                 entity.setMappingStatus(MappingStatus.SENT);
-                entity.setLastSentDate(LocalDateTime.now());
-                entity.setRetryCount(entity.getRetryCount() == null ? 1 : entity.getRetryCount() + 1);
+                //entity.setLastSentDate(LocalDateTime.now());
+                //entity.setRetryCount(entity.getRetryCount() == null ? 1 : entity.getRetryCount() + 1);
 
                 depositTransferMapRepository.save(entity);
 
@@ -451,7 +447,7 @@ public class DepositTransferServiceImpl implements DepositTransferService {
 
                 NcbsResponse response = transferOrchestratorService.execute(transferable);
 
-                entity.setReferenceId(response.getReferenceId());
+                //entity.setReferenceId(response.getReferenceId());
 
                 if (ApiResponseCode.SUCCESS.getCode().equals(response.getResponseCode())) {
                     entity.setMappingStatus(MappingStatus.SUCCESS);
@@ -496,7 +492,7 @@ public class DepositTransferServiceImpl implements DepositTransferService {
                 throw new IllegalStateException("Only HOLD data can be released");
             }
 
-            entity.setReleaseId(request.getReleaseId());
+            //entity.setReleaseId(request.getReleaseId());
             entity.setMappingStatus(MappingStatus.DRAFT);
             entity.setDescription("Released from HOLD");
 

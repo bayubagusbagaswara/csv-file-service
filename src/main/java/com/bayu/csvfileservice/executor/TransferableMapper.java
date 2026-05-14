@@ -41,7 +41,6 @@ public class TransferableMapper {
         dto.setCreditAccount(e.getCashAccountNo());
         dto.setAmount(e.getPrinciple());
         dto.setDescription(e.getDescription());
-        dto.setTransferMethod(e.getTransferMethod());
         dto.setTransferScope(e.getTransferScope());
 
 
@@ -83,7 +82,6 @@ public class TransferableMapper {
         dto.setCreditAccount(first.getCashAccountNo());
         dto.setAmount(totalAmount);
         dto.setDescription("Bulk Deposit Transfer - SI Reference: " + siReferenceBuilder);
-        dto.setTransferMethod(first.getTransferMethod());
         dto.setTransferScope(first.getTransferScope());
 
 
