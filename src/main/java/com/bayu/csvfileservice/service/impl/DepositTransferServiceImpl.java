@@ -2,22 +2,24 @@ package com.bayu.csvfileservice.service.impl;
 
 import com.bayu.csvfileservice.dto.ErrorDetail;
 import com.bayu.csvfileservice.dto.ProcessResult;
-import com.bayu.csvfileservice.dto.deposittransfer.*;
+import com.bayu.csvfileservice.dto.deposittransfer.map.ReleaseDepositTransferHoldRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.transaction.CreateBulkDepositTransferTransactionRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.transaction.CreateSingleDepositTransferTransactionRequest;
+import com.bayu.csvfileservice.dto.sinvest.SInvestBulkRequest;
+import com.bayu.csvfileservice.dto.sinvest.SInvestRequest;
 import com.bayu.csvfileservice.executor.TransferOrchestratorService;
 import com.bayu.csvfileservice.executor.Transferable;
 import com.bayu.csvfileservice.executor.TransferableMapper;
 import com.bayu.csvfileservice.mapper.DepositTransferMapper;
 import com.bayu.csvfileservice.model.*;
-import com.bayu.csvfileservice.model.enumerator.ApiResponseCode;
-import com.bayu.csvfileservice.model.enumerator.MappingStatus;
-import com.bayu.csvfileservice.model.enumerator.ProcessType;
-import com.bayu.csvfileservice.model.enumerator.TransferScope;
+import com.bayu.csvfileservice.model.enumerator.*;
 import com.bayu.csvfileservice.repository.DebitAccountProductRepository;
 import com.bayu.csvfileservice.repository.DepositTransferMapRepository;
 import com.bayu.csvfileservice.repository.MasterBankRepository;
 import com.bayu.csvfileservice.repository.SInvestRepository;
 import com.bayu.csvfileservice.service.DepositTransferService;
 import com.bayu.csvfileservice.service.ResponseCodeService;
+import com.bayu.csvfileservice.util.EnumConverter;
 import com.bayu.csvfileservice.util.TransferMethodValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,11 +47,12 @@ public class DepositTransferServiceImpl implements DepositTransferService {
 
     @Override
     @Transactional
-    public ProcessResult createSingleTransaction(CreateDepositTransferSingleRequest request) {
+    public ProcessResult createSingleTransaction(CreateSingleDepositTransferTransactionRequest request) {
 
         ProcessResult result = new ProcessResult();
 
         try {
+            TransferMethod transferMethod = EnumConverter.fromTransferMethod(request.getTransferMethod());
             DepositTransferMap entity = depositTransferMapRepository.findById(request.getId())
                     .orElseThrow(() -> new IllegalArgumentException("DepositTransferMap not found"));
 
@@ -59,7 +62,7 @@ public class DepositTransferServiceImpl implements DepositTransferService {
 
             transferMethodValidator.validate(
                     entity.getTransferScope(),
-                    request.getTransferMethod()
+                    transferMethod
             );
 
             entity.setProcessType(ProcessType.SINGLE);
@@ -85,7 +88,7 @@ public class DepositTransferServiceImpl implements DepositTransferService {
 
     @Override
     @Transactional
-    public ProcessResult createBulkTransaction(CreateDepositTransferBulkRequest request) {
+    public ProcessResult createBulkTransaction(CreateBulkDepositTransferTransactionRequest request) {
 
         ProcessResult result = new ProcessResult();
 
@@ -307,7 +310,7 @@ public class DepositTransferServiceImpl implements DepositTransferService {
 
     @Override
     @Transactional
-    public ProcessResult uploadRaw(DepositTransferBulkRequest request) {
+    public ProcessResult uploadRaw(SInvestBulkRequest request) {
 
         ProcessResult result = new ProcessResult();
 
