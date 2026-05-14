@@ -13,7 +13,8 @@ import com.bayu.csvfileservice.util.ClientIpUtil;
 import com.bayu.csvfileservice.util.DataChangeFactory;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,9 +23,10 @@ import java.util.List;
 
 @RestController
 @RequestMapping(path = "/api/management-fee")
-@Slf4j
 @RequiredArgsConstructor
 public class ManagementFeeRawController {
+
+    private static final Logger log = LoggerFactory.getLogger(ManagementFeeRawController.class);
 
     private static final String BASE_URL_MANAGEMENT_FEE = "/api/management-fee";
     private static final String MENU_MANAGEMENT_FEE = "Management Fee";
