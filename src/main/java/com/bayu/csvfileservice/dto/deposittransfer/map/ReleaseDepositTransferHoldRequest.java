@@ -1,4 +1,4 @@
-package com.bayu.csvfileservice.dto.deposittransfer;
+package com.bayu.csvfileservice.dto.deposittransfer.map;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -8,5 +8,5 @@ import lombok.Setter;
 public class ReleaseDepositTransferHoldRequest {
 
     private Long id;
-    private String releaseId;
+    private String releaseBy;
 }
