@@ -1,22 +1,22 @@
 package com.bayu.csvfileservice.service;
 
 import com.bayu.csvfileservice.dto.ProcessResult;
-import com.bayu.csvfileservice.dto.deposittransfer.CreateDepositTransferBulkRequest;
-import com.bayu.csvfileservice.dto.deposittransfer.CreateDepositTransferSingleRequest;
-import com.bayu.csvfileservice.dto.deposittransfer.DepositTransferBulkRequest;
-import com.bayu.csvfileservice.dto.deposittransfer.ReleaseDepositTransferHoldRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.transaction.CreateBulkDepositTransferTransactionRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.transaction.CreateSingleDepositTransferTransactionRequest;
+import com.bayu.csvfileservice.dto.sinvest.SInvestBulkRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.map.ReleaseDepositTransferHoldRequest;
 
 import java.util.List;
 
 public interface DepositTransferService {
 
-    ProcessResult uploadRaw(DepositTransferBulkRequest request);
+    ProcessResult uploadRaw(SInvestBulkRequest request);
 
     ProcessResult map();
 
-    ProcessResult createSingleTransaction(CreateDepositTransferSingleRequest request);
+    ProcessResult createSingleTransaction(CreateSingleDepositTransferTransactionRequest request);
 
-    ProcessResult createBulkTransaction(CreateDepositTransferBulkRequest request);
+    ProcessResult createBulkTransaction(CreateBulkDepositTransferTransactionRequest request);
 
     ProcessResult sendTransaction(List<Long> ids);
 
