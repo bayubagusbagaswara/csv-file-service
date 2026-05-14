@@ -13,7 +13,7 @@ import java.time.LocalDate;
 
 @EqualsAndHashCode(callSuper = true)
 @Entity
-@Table(name = "s_invest_instruction")
+@Table(name = "s_invest")
 @Data
 @SuperBuilder
 @NoArgsConstructor
@@ -36,8 +36,10 @@ public class SInvest extends BaseApproval {
 
     private BigDecimal principle;
 
-    private LocalDate placementDate;
+    private LocalDate date;
 
     @Column(name = "si_reference_id", nullable = false, length = 100)
     private String siReferenceId;
+
+    private String referenceNo;
 }
