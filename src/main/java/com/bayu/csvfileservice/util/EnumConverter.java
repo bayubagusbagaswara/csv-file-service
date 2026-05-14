@@ -9,7 +9,7 @@ import lombok.experimental.UtilityClass;
 import java.util.Arrays;
 
 @UtilityClass
-public class EnumUtil {
+public class EnumConverter {
 
     public static Month fromMonth(String month) {
         try {
@@ -35,7 +35,7 @@ public class EnumUtil {
 
     public static ApprovalStatus fromApprovalStatus(String status) {
         try {
-            return ApprovalStatus.valueOf(status);
+            return ApprovalStatus.valueOf(status.toUpperCase());
         } catch (Exception e) {
             throw new IllegalArgumentException(
                     String.format(
@@ -49,7 +49,7 @@ public class EnumUtil {
 
     public static MappingStatus fromMappingStatus(String status) {
         try {
-            return MappingStatus.valueOf(status);
+            return MappingStatus.valueOf(status.toUpperCase());
         } catch (Exception e) {
             throw new IllegalArgumentException(
                     String.format(
