@@ -2,10 +2,10 @@ package com.bayu.csvfileservice.controller;
 
 import com.bayu.csvfileservice.dto.ApiResponse;
 import com.bayu.csvfileservice.dto.ProcessResult;
-import com.bayu.csvfileservice.dto.deposittransfer.CreateDepositTransferBulkRequest;
-import com.bayu.csvfileservice.dto.deposittransfer.CreateDepositTransferSingleRequest;
-import com.bayu.csvfileservice.dto.deposittransfer.DepositTransferBulkRequest;
-import com.bayu.csvfileservice.dto.deposittransfer.ReleaseDepositTransferHoldRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.transaction.CreateBulkDepositTransferTransactionRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.transaction.CreateSingleDepositTransferTransactionRequest;
+import com.bayu.csvfileservice.dto.sinvest.SInvestBulkRequest;
+import com.bayu.csvfileservice.dto.deposittransfer.map.ReleaseDepositTransferHoldRequest;
 import com.bayu.csvfileservice.service.DepositTransferService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,7 +26,7 @@ public class DepositTransferController {
 
     @PostMapping("/upload-raw")
     public ResponseEntity<ApiResponse<ProcessResult>> uploadRaw(
-            @RequestBody DepositTransferBulkRequest request
+            @RequestBody SInvestBulkRequest request
     ) {
         return buildResponse(depositTransferService.uploadRaw(request));
     }
@@ -38,14 +38,14 @@ public class DepositTransferController {
 
     @PostMapping("/create-transaction/single")
     public ResponseEntity<ApiResponse<ProcessResult>> createSingleTransaction(
-            @RequestBody CreateDepositTransferSingleRequest request
+            @RequestBody CreateSingleDepositTransferTransactionRequest request
     ) {
         return buildResponse(depositTransferService.createSingleTransaction(request));
     }
 
     @PostMapping("/create-transaction/bulk")
     public ResponseEntity<ApiResponse<ProcessResult>> createBulkTransaction(
-            @RequestBody CreateDepositTransferBulkRequest request
+            @RequestBody CreateBulkDepositTransferTransactionRequest request
     ) {
         return buildResponse(depositTransferService.createBulkTransaction(request));
     }
