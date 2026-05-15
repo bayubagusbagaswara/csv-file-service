@@ -3,9 +3,6 @@ package com.bayu.csvfileservice.dto.sinvest;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
-
 @Getter
 @Setter
 public class SInvestRequest {
@@ -19,7 +16,8 @@ public class SInvestRequest {
     private String cashAccountName;
     private String cashAccountNo;
     private String currency;
-    private BigDecimal principle;
-    private LocalDate placementDate;
+    private String principle;
+    private String date;
+    private String referenceNo;
     private String siReferenceId;
 }
