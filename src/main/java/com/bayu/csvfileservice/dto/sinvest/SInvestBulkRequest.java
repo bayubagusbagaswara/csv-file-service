@@ -1,13 +1,15 @@
 package com.bayu.csvfileservice.dto.sinvest;
 
-import lombok.Getter;
-import lombok.Setter;
+import com.bayu.csvfileservice.dto.InputIdentifierRequest;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.util.List;
 
-@Getter
-@Setter
-public class SInvestBulkRequest {
+@EqualsAndHashCode(callSuper = true)
+@Data
+public class SInvestBulkRequest extends InputIdentifierRequest {
 
     private List<SInvestRequest> items;
+
 }
