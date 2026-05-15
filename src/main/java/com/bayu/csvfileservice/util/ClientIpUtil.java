@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ClientIpUtil {
 
-    public String getClientIp(HttpServletRequest servletRequest) {
+    public static String getClientIp(HttpServletRequest servletRequest) {
         String clientIp = servletRequest.getHeader("X-Forwarded-For");
         if (clientIp == null || clientIp.isEmpty()) {
             clientIp = servletRequest.getHeader("X-Real-IP");
