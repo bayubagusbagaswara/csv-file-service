@@ -278,19 +278,18 @@ public class DepositTransferMapServiceImpl implements DepositTransferMapService 
 
     @Override
     public List<DepositTransferMapDto> getAllByCurrentDate(LocalDate currentDate) {
-        return List.of();
+        List<DepositTransferMap> entities = depositTransferMapRepository.findAllByDate(currentDate);
+        return depositTransferMapper.fromEntitiesToDtos(entities);
     }
 
     @Override
     public List<DepositTransferMapDto> getAllByCurrentDateAndMappingStatus(LocalDate currentDate, MappingStatus mappingStatusEnum) {
-        return List.of();
+        List<DepositTransferMap> entities = depositTransferMapRepository.findAllByDateAndMappingStatus(
+                currentDate,
+                mappingStatusEnum
+        );
+        return depositTransferMapper.fromEntitiesToDtos(entities);
     }
-
-    @Override
-    public List<DepositTransferMapDto> getAllByCurrentDateAndApprovalStatusAndTransferMethod(LocalDate currentDate, ApprovalStatus approvalStatusEnum, TransferMethod transferMethodEnum) {
-        return List.of();
-    }
-
 
     // ======================== HELPER =============================
     private TransferScope resolveTransferScope(String bankCode) {
