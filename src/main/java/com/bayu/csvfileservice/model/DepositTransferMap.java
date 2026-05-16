@@ -3,6 +3,7 @@ package com.bayu.csvfileservice.model;
 import com.bayu.csvfileservice.model.base.BaseApproval;
 import com.bayu.csvfileservice.model.enumerator.MappingStatus;
 import com.bayu.csvfileservice.model.enumerator.ProcessType;
+import com.bayu.csvfileservice.model.enumerator.TransactionStatus;
 import com.bayu.csvfileservice.model.enumerator.TransferScope;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -105,10 +106,16 @@ public class DepositTransferMap extends BaseApproval {
     @Column(name = "process_type")
     private ProcessType processType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "transaction_status")
+    private TransactionStatus transactionStatus;
+
     // ============= helper column for storing user ID data that releases transactions with HOLD status. ===============
     @Column(name = "released_by")
     private String releasedBy;
     @Column(name = "released_date")
     private LocalDateTime releasedDate;
+    @Column(name = "released_ip_address")
+    private String releasedIpAddress;
 
 }
