@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
  */
 @EqualsAndHashCode(callSuper = true)
 @Entity
-@Table(name = "placement_deposit_map")
+@Table(name = "deposit_transfer_map")
 @Data
 @SuperBuilder
 @NoArgsConstructor
