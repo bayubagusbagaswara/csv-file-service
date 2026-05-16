@@ -277,7 +277,8 @@ public class SInvestServiceImpl implements SInvestService {
 
     @Override
     public Boolean isDeletableBySiReferenceId(String siReferenceId) {
-        return null;
+        boolean alreadyMapped = depositTransferMapRepository.existsBySiReferenceId(siReferenceId);
+        return !alreadyMapped;
     }
 
     // ========================== PROCESS BUSINESS =================================
