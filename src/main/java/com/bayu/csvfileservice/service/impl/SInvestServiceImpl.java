@@ -21,11 +21,10 @@ import jakarta.validation.ConstraintViolation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import static com.bayu.csvfileservice.util.RequestDataUtil.trimIfNotNull;
 
@@ -78,6 +77,8 @@ public class SInvestServiceImpl implements SInvestService {
         String siReferenceId = "";
 
         try {
+            List<String> errors = new ArrayList<>();
+
             DataChange dataChange = dataChangeService.getPendingById(dataChangeId);
 
             SInvestDto sInvestDto = jsonHelper.fromJson(dataChange.getJsonDataAfter(), SInvestDto.class);
@@ -85,11 +86,71 @@ public class SInvestServiceImpl implements SInvestService {
             siReferenceId = sInvestDto.getSiReferenceId();
 
             // ------------ Check unique data ------------
+            if (sInvestRepository.existsBySiReferenceId(siReferenceId)) {
+                // ------------ set approval field to data change -----------
+                setApprovalFieldsToDataChange(dataChange, userId, clientIp, null, now);
+                dataChange.setDescription(
+                        String.format("Rejected because S-Invest data with siReferenceId '%s' already exists", sInvestDto.getSiReferenceId())
+                );
 
+                // ------------ add error ----------------
+                errors.add(String.format("S-Invest data with siReferenceId '%s' already exists", sInvestDto.getSiReferenceId()));
+
+                // ------------ set approval status is rejected ------------
+                dataChangeService.setApprovalStatusIsRejected(dataChange, errors);
+
+                processResult.addError(ErrorDetailUtil.buildError(SI_REFERENCE_ID, siReferenceId, errors));
+
+                return processResult;
+            }
+
+            // ------------ Build Entity ---------------
+            SInvest sInvest = SInvest.builder()
+                    .imCode(sInvestDto.getImCode())
+                    .imName(sInvestDto.getImName())
+                    .fundCode(sInvestDto.getFundCode())
+                    .fundName(sInvestDto.getFundName())
+                    .bankCode(sInvestDto.getBankCode())
+                    .bankName(sInvestDto.getBankName())
+                    .cashAccountName(sInvestDto.getCashAccountName())
+                    .cashAccountNo(sInvestDto.getCashAccountNo())
+                    .currency(sInvestDto.getCurrency())
+                    .principle(new BigDecimal(sInvestDto.getPrinciple()))
+                    .date(parseToLocalDate(sInvestDto.getDate()))
+                    .siReferenceId(sInvestDto.getSiReferenceId())
+                    .referenceNo(sInvestDto.getReferenceNo())
+                    .build();
+
+            // ------------ set approval field ---------------
+            setApprovalFields(sInvest, dataChange, userId, clientIp, now);
+
+            // ------------ save entity ------------------
+            sInvestRepository.save(sInvest);
+
+            // ------------ set approval fields to data change -----------------
+            setApprovalFieldsToDataChange(dataChange, userId, clientIp, sInvest.getId(), now);
+
+            // ------------ set json data after -----------------
+            SInvestDto completeDto = sInvestMapper.fromEntityToDto(sInvest);
+            dataChange.setJsonDataAfter(jsonHelper.toJson(completeDto));
+
+            // ------------ set approval status is approved ------------
+            dataChange.setDescription("Success approve insert of SInvest with id: " + sInvest.getId());
+            dataChangeService.setApprovalStatusIsApproved(dataChange);
+
+            // ------------ success ---------------------
+            processResult.addSuccess();
 
         } catch (Exception e) {
-
+            log.error("Error approve SInvest for dataChangeId={} and siReferenceId={}", dataChangeId, siReferenceId, e);
+            processResult.addError(
+                    ErrorDetail.of(
+                            SI_REFERENCE_ID, siReferenceId,
+                            Collections.singletonList("Failed to approve S-Invest data " + e.getMessage())
+                    )
+            );
         }
+
         return processResult;
     }
 
