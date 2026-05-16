@@ -18,4 +18,6 @@ public interface DepositTransferMapRepository extends JpaRepository<DepositTrans
 
     boolean existsBySiReferenceIdAndDate(String siReferenceId, LocalDate date);
 
+    boolean existsBySiReferenceId(String siReferenceId);
+
 }
