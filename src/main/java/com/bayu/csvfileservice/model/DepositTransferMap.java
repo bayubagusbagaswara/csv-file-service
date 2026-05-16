@@ -118,4 +118,8 @@ public class DepositTransferMap extends BaseApproval {
     @Column(name = "released_ip_address")
     private String releasedIpAddress;
 
+    // =========== relation to DepositTransferTransaction ==============
+    @Column(name = "transaction_id")
+    private Long transactionId;
+
 }
