@@ -271,7 +271,8 @@ public class SInvestServiceImpl implements SInvestService {
 
     @Override
     public SInvestDto getById(Long id) {
-        return null;
+        SInvest sInvest = sInvestRepository.findById(id).orElseThrow(() -> new DataNotFoundException(NOT_FOUND + id));
+        return sInvestMapper.fromEntityToDto(sInvest);
     }
 
     @Override
