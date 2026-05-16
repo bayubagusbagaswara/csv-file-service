@@ -4,8 +4,6 @@ import com.bayu.csvfileservice.dto.ErrorDetail;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.deposittransfer.map.DepositTransferMapDto;
 import com.bayu.csvfileservice.exception.DataNotFoundException;
-import com.bayu.csvfileservice.executor.TransferOrchestratorService;
-import com.bayu.csvfileservice.executor.TransferableMapper;
 import com.bayu.csvfileservice.mapper.DepositTransferMapper;
 import com.bayu.csvfileservice.model.DebitAccountProduct;
 import com.bayu.csvfileservice.model.DepositTransferMap;
@@ -17,16 +15,11 @@ import com.bayu.csvfileservice.repository.DepositTransferMapRepository;
 import com.bayu.csvfileservice.repository.MasterBankRepository;
 import com.bayu.csvfileservice.repository.SInvestRepository;
 import com.bayu.csvfileservice.service.DepositTransferMapService;
-import com.bayu.csvfileservice.service.ResponseCodeService;
-import com.bayu.csvfileservice.util.TransferMethodValidator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -41,21 +34,13 @@ public class DepositTransferMapServiceImpl implements DepositTransferMapService 
     private final DebitAccountProductRepository debitAccountProductRepository;
     private final MasterBankRepository masterBankRepository;
     private final DepositTransferMapper depositTransferMapper;
-    private final TransferMethodValidator transferMethodValidator;
-    private final TransferableMapper transferableMapper;
-    private final TransferOrchestratorService transferOrchestratorService;
-    private final ResponseCodeService responseCodeService;
 
-    public DepositTransferMapServiceImpl(SInvestRepository sInvestRepository, DepositTransferMapRepository depositTransferMapRepository, DebitAccountProductRepository debitAccountProductRepository, MasterBankRepository masterBankRepository, DepositTransferMapper depositTransferMapper, TransferMethodValidator transferMethodValidator, TransferableMapper transferableMapper, TransferOrchestratorService transferOrchestratorService, ResponseCodeService responseCodeService) {
+    public DepositTransferMapServiceImpl(SInvestRepository sInvestRepository, DepositTransferMapRepository depositTransferMapRepository, DebitAccountProductRepository debitAccountProductRepository, MasterBankRepository masterBankRepository, DepositTransferMapper depositTransferMapper) {
         this.sInvestRepository = sInvestRepository;
         this.depositTransferMapRepository = depositTransferMapRepository;
         this.debitAccountProductRepository = debitAccountProductRepository;
         this.masterBankRepository = masterBankRepository;
         this.depositTransferMapper = depositTransferMapper;
-        this.transferMethodValidator = transferMethodValidator;
-        this.transferableMapper = transferableMapper;
-        this.transferOrchestratorService = transferOrchestratorService;
-        this.responseCodeService = responseCodeService;
     }
 
     @Override
@@ -215,6 +200,83 @@ public class DepositTransferMapServiceImpl implements DepositTransferMapService 
     }
 
     @Override
+    public ProcessResult releaseHold(List<Long> ids, String releasedBy, String clientIp) {
+        LocalDateTime now = LocalDateTime.now();
+        ProcessResult processResult = new ProcessResult();
+
+        if (ids == null || ids.isEmpty()) {
+            processResult.addError(
+                    ErrorDetail.of(
+                            "ids",
+                            null,
+                            Collections.singletonList("Release id list cannot be empty")
+                    )
+            );
+            return processResult;
+        }
+
+        List<DepositTransferMap> depositTransferMaps = depositTransferMapRepository.findAllById(ids);
+
+        Map<Long, DepositTransferMap> dataMap = new HashMap<>();
+
+        for (DepositTransferMap item : depositTransferMaps) {
+            dataMap.put(item.getId(), item);
+        }
+
+        for (Long id : ids) {
+            try {
+                DepositTransferMap entity = dataMap.get(id);
+
+                if (entity == null) {
+                    throw new DataNotFoundException("DepositTransferMap not found with id: " + id);
+                }
+
+                if (!MappingStatus.HOLD.equals(entity.getMappingStatus())) {
+                    throw new IllegalStateException(
+                            "Only HOLD data can be released. Current status: " + entity.getMappingStatus()
+                    );
+                }
+
+                // validasi agar data yang sudah punya transaction tidak bisa di-release
+                if (entity.getTransactionStatus() != null) {
+                    throw new IllegalStateException("Data cannot be released because it already has transaction");
+                }
+
+                // release HOLD menjadi DRAFT
+                entity.setMappingStatus(MappingStatus.DRAFT);
+
+                // approvalStatus tetap APPROVED karena mapping dan release tidak memakai maker-checker
+                entity.setApprovalStatus(ApprovalStatus.APPROVED);
+
+                // set audit khusus release
+                entity.setReleasedBy(releasedBy);
+                entity.setReleasedDate(now);
+                entity.setReleasedIpAddress(clientIp);
+
+                entity.setDescription("Released from HOLD");
+
+                depositTransferMapRepository.save(entity);
+
+                processResult.addSuccess();
+
+            } catch (Exception e) {
+
+                log.error("Failed to release HOLD DepositTransferMap. id={}, releasedBy={}", id, releasedBy, e);
+
+                processResult.addError(
+                        ErrorDetail.of(
+                                "id",
+                                String.valueOf(id),
+                                Collections.singletonList(e.getMessage())
+                        )
+                );
+            }
+        }
+
+        return processResult;
+    }
+
+    @Override
     public List<DepositTransferMapDto> getAllByCurrentDate(LocalDate currentDate) {
         return List.of();
     }
@@ -229,83 +291,12 @@ public class DepositTransferMapServiceImpl implements DepositTransferMapService 
         return List.of();
     }
 
-    @Override
-    public ProcessResult releaseHold(List<Long> ids, String releaseBy, String clientIp) {
-        // releaseBy = userId
-
-        return null;
-    }
 
     // ======================== HELPER =============================
     private TransferScope resolveTransferScope(String bankCode) {
         return "0011".equals(bankCode)
                 ? TransferScope.INTERNAL
                 : TransferScope.EXTERNAL;
-    }
-
-    private void validateSendStatus(MappingStatus mappingStatus) {
-        boolean canSend = MappingStatus.READY.equals(mappingStatus)
-                || MappingStatus.RETRY.equals(mappingStatus);
-        if (!canSend) {
-            throw new IllegalStateException("Only READY or RETRY data can be sent");
-        }
-    }
-
-    private static String buildJoinedSiReferenceId(List<DepositTransferMap> list) {
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < list.size(); i++) {
-            if (i > 0) {
-                builder.append(", ");
-            }
-
-            builder.append(list.get(i).getSiReferenceId());
-        }
-        return builder.toString();
-    }
-
-    private static String createBulkReferenceId() {
-        String dateTime = ZonedDateTime.now(ZoneId.of("Asia/Jakarta"))
-                .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        return dateTime + "_" + UUID.randomUUID()
-                .toString()
-                .replace("-", "")
-                ;
-    }
-
-    private static void validateBulkCandidate(List<DepositTransferMap> candidateList) {
-        if (candidateList == null || candidateList.isEmpty()) {
-            throw new IllegalArgumentException("DepositTransferMap list must be not be empty");
-        }
-
-        // Use first record as reference (baseline)
-        DepositTransferMap reference = candidateList.get(0);
-
-        String referenceFundCode = reference.getFundCode();
-        String referenceCashAccountNo = reference.getCashAccountNo();
-        String referenceBankCode = reference.getBankCode();
-
-        for (DepositTransferMap data : candidateList) {
-
-            // Validate status
-            if (!MappingStatus.DRAFT.equals(data.getMappingStatus())) {
-                throw new IllegalStateException(
-                        "Bulk operation is rejected: only records with DRAFT status are allowed."
-                );
-            }
-
-            // validate all required fields must be identical
-            if (!Objects.equals(referenceFundCode, data.getFundCode())
-                    || !Objects.equals(referenceCashAccountNo, data.getCashAccountNo())
-                    || !Objects.equals(referenceBankCode, data.getBankCode())
-            ) {
-                throw new IllegalStateException(
-                        "Bulk operation is rejected due to inconsistent data. " +
-                                "fundCode= " + data.getFundCode() +
-                                ", cashAccountNo= " + data.getCashAccountNo() +
-                                ", bankCode= " + data.getBankCode()
-                );
-            }
-        }
     }
 
 }
