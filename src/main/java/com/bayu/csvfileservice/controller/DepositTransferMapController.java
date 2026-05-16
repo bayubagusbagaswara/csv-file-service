@@ -5,9 +5,7 @@ import com.bayu.csvfileservice.dto.InputIdentifierRequest;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.deposittransfer.map.DepositTransferMapDto;
 import com.bayu.csvfileservice.dto.deposittransfer.map.ReleaseDepositTransferHoldRequest;
-import com.bayu.csvfileservice.model.enumerator.ApprovalStatus;
 import com.bayu.csvfileservice.model.enumerator.MappingStatus;
-import com.bayu.csvfileservice.model.enumerator.TransferMethod;
 import com.bayu.csvfileservice.service.DepositTransferMapService;
 import com.bayu.csvfileservice.util.ApiResponseBuilder;
 import com.bayu.csvfileservice.util.ClientIpUtil;
@@ -68,25 +66,7 @@ public class DepositTransferMapController {
         return ApiResponseBuilder.success(list);
     }
 
-    @GetMapping("/current/approval-status/transfer-method")
-    public ResponseEntity<ApiResponse<List<DepositTransferMapDto>>> getAllByCurrentDateAndApprovalStatusAndTransferMethod(
-            @RequestParam("approvalStatus") String approvalStatus,
-            @RequestParam("transferMethod") String transferMethod
-    ) {
-        LocalDate currentDate = LocalDate.now();
-        ApprovalStatus approvalStatusEnum = EnumConverter.fromApprovalStatus(approvalStatus);
-        TransferMethod transferMethodEnum = EnumConverter.fromTransferMethod(transferMethod);
-
-        List<DepositTransferMapDto> list =
-                mapService.getAllByCurrentDateAndApprovalStatusAndTransferMethod(
-                        currentDate,
-                        approvalStatusEnum,
-                        transferMethodEnum
-                );
-
-        return ApiResponseBuilder.success(list);
-    }
-
+    @PostMapping("/release-hold")
     public ResponseEntity<ApiResponse<ProcessResult>> releaseHold(
             @RequestBody ReleaseDepositTransferHoldRequest request,
             HttpServletRequest servletRequest
