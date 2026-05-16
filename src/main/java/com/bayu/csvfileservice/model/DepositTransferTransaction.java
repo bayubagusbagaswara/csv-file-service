@@ -18,7 +18,15 @@ import java.time.LocalDateTime;
  */
 @EqualsAndHashCode(callSuper = true)
 @Entity
-@Table
+@Table(
+        name = "deposit_transfer_transaction",
+        indexes = {
+                @Index(name = "idx_dtt_si_reference_id", columnList = "si_reference_id"),
+                @Index(name = "idx_dtt_bulk_reference_id", columnList = "bulk_reference_id"),
+                @Index(name = "idx_dtt_transaction_status", columnList = "transaction_status"),
+                @Index(name = "idx_dtt_reference_id", columnList = "reference_id")
+        }
+)
 @Data
 @SuperBuilder
 @NoArgsConstructor
@@ -56,13 +64,13 @@ public class DepositTransferTransaction extends BaseApproval {
     @Column(name = "currency")
     private String currency;
 
-    @Column(name = "principle")
-    private BigDecimal principle;
+    @Column(name = "total_amount")
+    private BigDecimal totalAmount;
 
     @Column(name = "date")
     private LocalDate date;
 
-    @Column(name = "si_reference_id", nullable = false, length = 100)
+    @Column(name = "si_reference_id", length = 100)
     private String siReferenceId;
 
     @Column(name = "reference_no")
