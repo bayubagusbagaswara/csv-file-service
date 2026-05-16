@@ -1,10 +1,7 @@
 package com.bayu.csvfileservice.model;
 
 import com.bayu.csvfileservice.model.base.BaseApproval;
-import com.bayu.csvfileservice.model.enumerator.MappingStatus;
-import com.bayu.csvfileservice.model.enumerator.ProcessType;
-import com.bayu.csvfileservice.model.enumerator.TransferMethod;
-import com.bayu.csvfileservice.model.enumerator.TransferScope;
+import com.bayu.csvfileservice.model.enumerator.*;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -105,12 +102,12 @@ public class DepositTransferTransaction extends BaseApproval {
     private TransferMethod transferMethod;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "mapping_status")
-    private MappingStatus mappingStatus;
-
-    @Enumerated(EnumType.STRING)
     @Column(name = "process_type")
     private ProcessType processType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "transaction_status")
+    private TransactionStatus transactionStatus;
 
     // ============= referenceId for Middleware unique id, auto generate by system =============
     @Column(name = "reference_id")
