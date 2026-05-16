@@ -2,7 +2,6 @@ package com.bayu.csvfileservice.service;
 
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.deposittransfer.map.DepositTransferMapDto;
-import com.bayu.csvfileservice.dto.deposittransfer.map.ReleaseDepositTransferHoldRequest;
 import com.bayu.csvfileservice.model.enumerator.ApprovalStatus;
 import com.bayu.csvfileservice.model.enumerator.MappingStatus;
 import com.bayu.csvfileservice.model.enumerator.TransferMethod;
@@ -20,6 +19,6 @@ public interface DepositTransferMapService {
 
     List<DepositTransferMapDto> getAllByCurrentDateAndApprovalStatusAndTransferMethod(LocalDate currentDate, ApprovalStatus approvalStatusEnum, TransferMethod transferMethodEnum);
 
-    ProcessResult releaseHold(ReleaseDepositTransferHoldRequest request, String releaseBy, String clientIp);
+    ProcessResult releaseHold(List<Long> ids, String releaseBy, String clientIp);
 
 }
