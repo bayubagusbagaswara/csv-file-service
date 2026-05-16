@@ -6,6 +6,7 @@ import com.bayu.csvfileservice.dto.datachange.DataChangeDto;
 import com.bayu.csvfileservice.dto.sinvest.SInvestBulkRequest;
 import com.bayu.csvfileservice.dto.sinvest.SInvestDto;
 import com.bayu.csvfileservice.dto.sinvest.SInvestRequest;
+import com.bayu.csvfileservice.exception.DataNotFoundException;
 import com.bayu.csvfileservice.mapper.DataChangeHelperMapper;
 import com.bayu.csvfileservice.mapper.DataChangeMapper;
 import com.bayu.csvfileservice.mapper.SInvestMapper;
@@ -156,7 +157,54 @@ public class SInvestServiceImpl implements SInvestService {
 
     @Override
     public ProcessResult deleteById(Long id, DataChangeDto dataChangeDto) {
-        return null;
+        ProcessResult processResult = new ProcessResult();
+        String siReferenceId = "";
+
+        try {
+
+            List<String> errors = new ArrayList<>();
+
+            SInvest sInvest = sInvestRepository.findById(id)
+                    .orElseThrow(() -> new DataNotFoundException(NOT_FOUND + id));
+
+            // ----------- get siReferenceId -------------
+            siReferenceId = sInvest.getSiReferenceId();
+
+            // ----------- get date --------------
+            LocalDate date = sInvest.getDate();
+
+            // ----------- check data in the Map table ----------------
+            if (depositTransferMapRepository.existsBySiReferenceIdAndDate(siReferenceId, date)) {
+                errors.add(String.format("SInvest data has been mapped with siReferenceId '%s'", siReferenceId));
+
+                processResult.addError(ErrorDetailUtil.buildError(SI_REFERENCE_ID, siReferenceId, errors));
+
+                return processResult;
+            }
+
+            // --------- map from entity to dto ----------
+            SInvestDto sInvestDto = sInvestMapper.fromEntityToDto(sInvest);
+
+            DataChangeDto dtoAudit = dataChangeHelperMapper.forDelete(dataChangeDto, sInvestDto);
+
+            DataChange dataChange = dataChangeMapper.toEntity(dtoAudit);
+
+            dataChange.setEntityId(String.valueOf(sInvest.getId()));
+
+            dataChangeService.createChangeActionDelete(dataChange, SInvest.class);
+
+            processResult.addSuccess();
+
+        } catch (Exception e) {
+            log.error("Error delete by id {} and siReferenceId {}", id, siReferenceId, e);
+            processResult.addError(
+                    ErrorDetail.of(
+                            SI_REFERENCE_ID, siReferenceId,
+                            Collections.singletonList("Failed delete by id" + e.getMessage())
+                    )
+            );
+        }
+        return processResult;
     }
 
     @Override
