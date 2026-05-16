@@ -93,8 +93,9 @@ public class DepositTransferMapController {
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
         String releaseBy = request.getReleaseBy();
+        List<Long> ids = request.getIds();
 
-        ProcessResult processResult = mapService.releaseHold(request, releaseBy, clientIp);
+        ProcessResult processResult = mapService.releaseHold(ids, releaseBy, clientIp);
         return ApiResponseBuilder.success(processResult);
     }
 
