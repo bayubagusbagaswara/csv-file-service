@@ -202,7 +202,7 @@ public class SInvestServiceImpl implements SInvestService {
             processResult.addError(
                     ErrorDetail.of(
                             SI_REFERENCE_ID, siReferenceId,
-                            Collections.singletonList("Failed delete by id" + e.getMessage())
+                            Collections.singletonList("Failed delete by id: " + e.getMessage())
                     )
             );
         }
@@ -211,7 +211,62 @@ public class SInvestServiceImpl implements SInvestService {
 
     @Override
     public ProcessResult approveDelete(Long dataChangeId, String userId, String clientIp) {
-        return null;
+        LocalDateTime now = LocalDateTime.now();
+        ProcessResult processResult = new ProcessResult();
+        String siReferenceId = "";
+
+        try {
+
+            DataChange dataChange = dataChangeService.getPendingById(dataChangeId);
+
+            Long entityId = dataChange.getEntityId() != null
+                    ? Long.valueOf(dataChange.getEntityId())
+                    : null;
+
+            Optional<SInvest> optional = entityId != null
+                    ? sInvestRepository.findById(entityId)
+                    : Optional.empty();
+
+            if (optional.isPresent()) {
+                SInvest sInvest = optional.get();
+                siReferenceId = sInvest.getSiReferenceId();
+
+                setApprovalFieldsToDataChange(dataChange, userId, clientIp, sInvest.getId(), now);
+
+                // delete
+                sInvestRepository.delete(sInvest);
+
+                dataChange.setJsonDataAfter(null);
+                dataChange.setDescription("Success delete SInvest with id: " + sInvest.getId());
+                dataChangeService.setApprovalStatusIsApproved(dataChange);
+                processResult.addSuccess();
+
+            } else {
+                setApprovalFieldsToDataChange(dataChange, userId, clientIp, null, now);
+                dataChangeService.setApprovalStatusIsRejected(
+                        dataChange,
+                        Collections.singletonList(NOT_FOUND + dataChange.getEntityId())
+                );
+
+                processResult.addError(
+                        ErrorDetail.of(
+                                SI_REFERENCE_ID,
+                                siReferenceId,
+                                Collections.singletonList(NOT_FOUND + entityId)
+                        )
+                );
+            }
+        } catch (Exception e) {
+            log.error("Error delete approve with dataChangeId={}, siReferenceId={}", dataChangeId, siReferenceId, e);
+            processResult.addError(
+                    ErrorDetail.of(
+                            SI_REFERENCE_ID,
+                            siReferenceId,
+                            Collections.singletonList("Failed to approve delete: " + e.getMessage())
+                    )
+            );
+        }
+        return processResult;
     }
 
     @Override
