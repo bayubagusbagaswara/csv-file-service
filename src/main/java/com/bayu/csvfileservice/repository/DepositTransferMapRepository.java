@@ -37,13 +37,20 @@ public interface DepositTransferMapRepository extends JpaRepository<DepositTrans
     );
 
     @Query("SELECT CASE WHEN COUNT(d) > 0 THEN true ELSE false END " +
-            "FROM DepositTransferMap d " +
-            "JOIN d.transaction t " +
-            "WHERE d.siReferenceId = :siReferenceId " +
+            "FROM DepositTransferMap d, DepositTransferTransaction t " +
+            "WHERE d.transactionId = t.id " +
+            "AND d.siReferenceId = :siReferenceId " +
             "AND t.transactionStatus IN :statuses")
     boolean existsActiveTransactionBySiReferenceId(
             @Param("siReferenceId") String siReferenceId,
             @Param("statuses") List<TransactionStatus> statuses
+    );
+
+    List<DepositTransferMap> findAllByDate(LocalDate date);
+
+    List<DepositTransferMap> findAllByDateAndMappingStatus(
+            LocalDate date,
+            MappingStatus mappingStatus
     );
 
 }
