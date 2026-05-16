@@ -86,8 +86,10 @@ public class SInvestServiceImpl implements SInvestService {
 
             siReferenceId = sInvestDto.getSiReferenceId();
 
+            LocalDate date = parseToLocalDate(sInvestDto.getDate());
+
             // ------------ Check unique data ------------
-            if (sInvestRepository.existsBySiReferenceId(siReferenceId)) {
+            if (sInvestRepository.existsBySiReferenceIdAndDate(siReferenceId, date)) {
                 // ------------ set approval field to data change -----------
                 setApprovalFieldsToDataChange(dataChange, userId, clientIp, null, now);
                 dataChange.setDescription(
@@ -230,6 +232,7 @@ public class SInvestServiceImpl implements SInvestService {
         List<String> errors = new ArrayList<>();
         trimRequestData(request);
         String siReferenceId = request.getSiReferenceId();
+        LocalDate date = parseToLocalDate(request.getDate());
 
         // --------------- Validation Data -------------------
         List<String> validationErrors = validateRequest(request);
@@ -239,7 +242,7 @@ public class SInvestServiceImpl implements SInvestService {
         }
 
         // --------------- Check unique data by SiReferenceId ------------
-        if (sInvestRepository.existsBySiReferenceId(siReferenceId)) {
+        if (sInvestRepository.existsBySiReferenceIdAndDate(siReferenceId, date)) {
             errors.add(String.format("Data already exists for the same SiReferenceId '%s'", siReferenceId));
             return ErrorDetailUtil.buildError(SI_REFERENCE_ID, siReferenceId, errors);
         }
