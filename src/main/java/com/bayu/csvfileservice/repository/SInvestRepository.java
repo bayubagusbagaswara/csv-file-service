@@ -5,11 +5,14 @@ import com.bayu.csvfileservice.model.SInvest;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public interface SInvestRepository extends JpaRepository<SInvest, Long> {
 
     boolean existsBySiReferenceId(String siReferenceId);
 
     boolean existsBySiReferenceIdAndDate(String siReferenceId, LocalDate date);
+
+    List<SInvest> findAllByDate(LocalDate currentDate);
 
 }
