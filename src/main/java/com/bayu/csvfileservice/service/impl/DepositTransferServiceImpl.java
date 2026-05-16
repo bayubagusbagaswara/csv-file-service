@@ -325,8 +325,6 @@ public class DepositTransferServiceImpl implements DepositTransferService {
                     continue;
                 }
 
-                SInvest entity = depositTransferMapper.toSInvest(item);
-                sInvestRepository.save(entity);
 
                 result.addSuccess();
 
@@ -375,7 +373,7 @@ public class DepositTransferServiceImpl implements DepositTransferService {
                         );
 
                 DepositTransferMap depositTransferMap =
-                        depositTransferMapper.toDepositTransferMap(sInvest);
+                        depositTransferMapper.fromSInvestToDepositTransferMap(sInvest);
 
                 DebitAccountProduct accountDebitProduct = accountDebitProductRepository
                         .findByFundCode(sInvest.getFundCode())
