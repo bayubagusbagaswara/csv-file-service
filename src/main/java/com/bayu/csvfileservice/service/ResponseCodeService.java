@@ -6,6 +6,10 @@ public interface ResponseCodeService {
 
     List<String> getInsufficientBalanceCodes();
 
+    List<String> getSuccessCodes();
+
     boolean isInsufficientBalance(String code);
+
+    boolean isSuccess(String code);
 
 }
