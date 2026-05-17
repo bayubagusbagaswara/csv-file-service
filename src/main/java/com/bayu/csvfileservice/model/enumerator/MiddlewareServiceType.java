@@ -12,15 +12,15 @@ public enum MiddlewareServiceType {
     BI_FAST_PAYMENT_STATUS("BI_FAST_PAYMENT_STATUS"),
     OVERBOOKING_CASA_TO_GL("OVERBOOKING_CASA_TO_GL");
 
-    private final String name;
+    private final String label;
 
     MiddlewareServiceType(String name) {
-        this.name = name;
+        this.label = name;
     }
 
     public static MiddlewareServiceType fromName(String name) {
         for (MiddlewareServiceType value : values()) {
-            if (value.name.equalsIgnoreCase(name)) {
+            if (value.label.equalsIgnoreCase(name)) {
                 return value;
             }
         }
