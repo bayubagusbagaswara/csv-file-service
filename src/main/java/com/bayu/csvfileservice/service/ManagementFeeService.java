@@ -3,11 +3,11 @@ package com.bayu.csvfileservice.service;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.datachange.DataChangeDto;
 import com.bayu.csvfileservice.dto.managementfee.ManagementFeeBulkRequest;
-import com.bayu.csvfileservice.model.ManagementFeeRaw;
+import com.bayu.csvfileservice.model.ManagementFee;
 
 import java.util.List;
 
-public interface ManagementFeeRawService {
+public interface ManagementFeeService {
 
     ProcessResult createBulk(ManagementFeeBulkRequest request, DataChangeDto dataChangeDto);
 
@@ -17,6 +17,6 @@ public interface ManagementFeeRawService {
 
     ProcessResult approveDelete(Long dataChangeId, String userId, String clientIp);
 
-    List<ManagementFeeRaw> getAll();
+    List<ManagementFee> getAll();
 
 }
