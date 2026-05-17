@@ -3,9 +3,11 @@ package com.bayu.csvfileservice.service.impl;
 import com.bayu.csvfileservice.dto.ErrorDetail;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.exception.DataNotFoundException;
+import com.bayu.csvfileservice.executor.TransferExecutionResult;
 import com.bayu.csvfileservice.executor.TransferOrchestratorService;
+import com.bayu.csvfileservice.executor.Transferable;
+import com.bayu.csvfileservice.executor.TransferableMapper;
 import com.bayu.csvfileservice.model.ManagementFeeMap;
-import com.bayu.csvfileservice.model.NcbsResponse;
 import com.bayu.csvfileservice.model.enumerator.ApprovalStatus;
 import com.bayu.csvfileservice.model.enumerator.MappingStatus;
 import com.bayu.csvfileservice.model.enumerator.TransferMethod;
@@ -37,6 +39,7 @@ public class ManagementFeeTransactionServiceImpl implements ManagementFeeTransac
     private final TransferMethodValidator transferMethodValidator;
     private final TransferOrchestratorService transferOrchestratorService;
     private final ResponseCodeService responseCodeService;
+    private final TransferableMapper transferableMapper;
 
     @Override
     public ProcessResult create(Long id, TransferMethod transferMethod, String description, String userId, String clientIp) {
@@ -134,108 +137,15 @@ public class ManagementFeeTransactionServiceImpl implements ManagementFeeTransac
 
     @Override
     public ProcessResult send(List<Long> ids, String userId, String clientIp) {
+        validateIds(ids);
+
         LocalDateTime now = LocalDateTime.now();
         ProcessResult result = new ProcessResult();
 
-        if (ids == null || ids.isEmpty()) {
-            result.addError(
-                    ErrorDetail.of(
-                            IDS,
-                            "DATA_REQUEST_EMPTY",
-                            Collections.singletonList("ManagementFeeMap id list cannot be empty")
-                    )
-            );
-            return result;
-        }
+        Map<Long, ManagementFeeMap> dataMap = getManagementFeeMapByIds(ids);
 
-        // 1. Ambil semua ManagementFeeMap berdasarkan ids.
-        List<ManagementFeeMap> maps = managementFeeMapRepository.findAllById(ids);
-
-        // 2. Convert ke Map agar id yang tidak ditemukan tetap bisa diketahui.
-        Map<Long, ManagementFeeMap> dataMap = new HashMap<>();
-
-        for (ManagementFeeMap map : maps) {
-            dataMap.put(map.getId(), map);
-        }
-
-        // 3. Loop berdasarkan ids request.
         for (Long id : ids) {
-
-            ManagementFeeMap map = dataMap.get(id);
-
-            try {
-                // 4. Validasi data harus ditemukan.
-                if (map == null) {
-                    throw new DataNotFoundException(
-                            "ManagementFeeMap not found with id: " + id
-                    );
-                }
-
-                // 5. Validasi data boleh dikirim.
-                //
-                // Data harus approvalStatus PENDING.
-                // Status harus READY atau RETRY.
-                validateSendCandidate(map);
-
-                // 6. Set status SENT sebelum call middleware.
-                //
-                // Ini sebagai audit bahwa transaksi sudah pernah dicoba dikirim.
-                map.setStatus(MappingStatus.SENT);
-                map.setLastSentDate(now);
-
-                // 7. Increment retryCount.
-                //
-                // First send: 0/null menjadi 1.
-                // Retry berikutnya: tambah 1.
-                map.setRetryCount(
-                        map.getRetryCount() == null
-                                ? 1
-                                : map.getRetryCount() + 1
-                );
-
-                managementFeeMapRepository.save(map);
-
-                // 8. Kirim ke middleware melalui orchestrator.
-                //
-                // ManagementFeeMap implements Transferable,
-                // sehingga bisa langsung dipakai oleh TransferOrchestratorService.
-                NcbsResponse response = transferOrchestratorService.execute(map);
-
-                // 9. Simpan referenceId response utama.
-                map.setReferenceId(response.getReferenceId());
-
-                // 10. Tentukan status akhir berdasarkan responseCode.
-                //
-                // success code -> SUCCESS
-                // insufficient balance -> RETRY
-                // lainnya -> FAILED
-                applyResponseStatus(map, response);
-
-                // 11. Send dianggap sebagai approval atas transaksi.
-                map.setApprovalStatus(ApprovalStatus.APPROVED);
-                map.setApproveId(userId);
-                map.setApproveDate(now);
-                map.setApproveIpAddress(clientIp);
-
-                // 12. Simpan hasil akhir.
-                managementFeeMapRepository.save(map);
-
-                result.addSuccess();
-
-            } catch (Exception e) {
-                log.error("Failed to send Management Fee transaction. id={}, fundCode={}, userId={}", id, map != null ? map.getFundCode() : null, userId, e);
-//                if (map != null) {
-//                    map.setStatus(MappingStatus.FAILED);
-//                    managementFeeMapRepository.save(map);
-//                }
-                result.addError(
-                        ErrorDetail.of(
-                                ID,
-                                String.valueOf(id),
-                                Collections.singletonList(e.getMessage())
-                        )
-                );
-            }
+            processSendSingle(id, dataMap.get(id), userId, clientIp, now, result);
         }
 
         return result;
@@ -408,16 +318,122 @@ public class ManagementFeeTransactionServiceImpl implements ManagementFeeTransac
     // RESPONSE HANDLER
     // =========================================================
 
+    private void validateIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new IllegalArgumentException("ManagementFeeMap id list cannot be empty");
+        }
+    }
+
+    private Map<Long, ManagementFeeMap> getManagementFeeMapByIds(List<Long> ids) {
+        List<ManagementFeeMap> maps = managementFeeMapRepository.findAllById(ids);
+        Map<Long, ManagementFeeMap> dataMap = new HashMap<>();
+        for (ManagementFeeMap map : maps) {
+            dataMap.put(map.getId(), map);
+        }
+        return dataMap;
+    }
+
+    private void processSendSingle(
+            Long id,
+            ManagementFeeMap map,
+            String userId,
+            String clientIp,
+            LocalDateTime now,
+            ProcessResult result
+    ) {
+        try {
+            validateSendDataFound(id, map);
+
+            validateSendCandidate(map);
+
+            markAsSent(map, now);
+
+            TransferExecutionResult executionResult = executeTransfer(map);
+
+            updateTransactionResult(map, executionResult, userId, clientIp, now);
+
+            result.addSuccess();
+
+        } catch (Exception e) {
+            handleSendError(id, map, userId, result, e);
+        }
+    }
+
+    private void validateSendDataFound(Long id, ManagementFeeMap map) {
+        if (map == null) {
+            throw new DataNotFoundException(
+                    "ManagementFeeMap not found with id: " + id
+            );
+        }
+    }
+
+    private void markAsSent(ManagementFeeMap map, LocalDateTime now) {
+        map.setStatus(MappingStatus.SENT);
+        map.setLastSentDate(now);
+        map.setRetryCount(
+                map.getRetryCount() == null
+                        ? 1
+                        : map.getRetryCount() + 1
+        );
+        managementFeeMapRepository.save(map);
+    }
+
+    private TransferExecutionResult executeTransfer(ManagementFeeMap map) {
+        Transferable transferable = transferableMapper.fromManagementFeeMap(map);
+        return transferOrchestratorService.execute(transferable);
+    }
+
+    private void updateTransactionResult(
+            ManagementFeeMap map,
+            TransferExecutionResult executionResult,
+            String userId,
+            String clientIp,
+            LocalDateTime now
+    ) {
+        map.setInquiryReferenceId(executionResult.getInquiryReferenceId());
+        map.setReferenceId(executionResult.getReferenceId());
+
+        applyResponseStatus(map, executionResult);
+
+        map.setApprovalStatus(ApprovalStatus.APPROVED);
+        map.setApproveId(userId);
+        map.setApproveDate(now);
+        map.setApproveIpAddress(clientIp);
+
+        managementFeeMapRepository.save(map);
+    }
+
+    private void handleSendError(
+            Long id,
+            ManagementFeeMap map,
+            String userId,
+            ProcessResult result,
+            Exception e
+    ) {
+        log.error("Failed to send Management Fee transaction. id={}, fundCode={}, userId={}", id, map != null ? map.getFundCode() : null, userId, e);
+        if (map != null) {
+            map.setStatus(MappingStatus.FAILED);
+            managementFeeMapRepository.save(map);
+        }
+        result.addError(
+                ErrorDetail.of(
+                        ID,
+                        String.valueOf(id),
+                        Collections.singletonList(e.getMessage())
+                )
+        );
+    }
+
     private void applyResponseStatus(
             ManagementFeeMap map,
-            NcbsResponse response
+            TransferExecutionResult executionResult
     ) {
-        if (response == null) {
+        if (executionResult == null) {
             map.setStatus(MappingStatus.FAILED);
             return;
         }
 
-        String responseCode = response.getResponseCode();
+        String responseCode = executionResult.getResponseCode();
 
         if (responseCodeService.isSuccess(responseCode)) {
             map.setStatus(MappingStatus.SUCCESS);
