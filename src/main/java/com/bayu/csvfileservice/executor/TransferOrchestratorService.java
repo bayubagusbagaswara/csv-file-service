@@ -1,6 +1,5 @@
 package com.bayu.csvfileservice.executor;
 
-import com.bayu.csvfileservice.model.NcbsResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -16,20 +15,17 @@ public class TransferOrchestratorService {
         this.executors = executors;
     }
 
-    public NcbsResponse execute(Transferable item) {
-        TransferExecutor executor = null;
-        for (TransferExecutor e : executors) {
-            if (e.supports(item.getTransferMethod())) {
-                executor = e;
-                break;
+    public TransferExecutionResult execute(Transferable item) {
+
+        for (TransferExecutor executor : executors) {
+            if (executor.supports(item.getTransferMethod())) {
+                return executor.execute(item);
             }
         }
 
-        if (executor == null) {
-            throw new IllegalStateException("No executor found");
-        }
-
-        return executor.execute(item);
+        throw new IllegalStateException(
+                "No executor found for transferMethod: " + item.getTransferMethod()
+        );
     }
 
 }
