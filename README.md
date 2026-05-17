@@ -2435,3 +2435,40 @@ Reject transaction:
 4. Detail kembali menjadi DRAFT
 5. Detail bisa dipakai lagi untuk createSingle / createBulk
 ```
+
+# Flow Management Fee Map
+
+```bash
+ManagementFeeMapService.map:
+1. Validasi month + year
+2. Cek active status untuk periode tersebut
+3. Jika ada READY/SENT/SUCCESS/RETRY, mapping ditolak
+4. Hapus DRAFT lama
+5. Ambil raw ManagementFee
+6. Enrich dari MasterBank dan DebitAccountProduct
+7. Simpan ke ManagementFeeMap sebagai DRAFT
+```
+
+# Flow Management Fee Create Transaction
+
+```bash
+ManagementFeeTransactionService.createTransaction:
+1. Data harus DRAFT
+2. TransferMethod divalidasi terhadap TransferScope
+3. Set transferMethod
+4. Set status READY
+5. Reset execution field
+```
+
+# Flow Management Fee Send Transaction
+
+```bash
+ManagementFeeTransactionService.sendTransaction:
+1. Data harus READY atau RETRY
+2. Set status SENT
+3. Increment retryCount
+4. Kirim ke middleware
+5. Success → SUCCESS
+6. Saldo kurang → RETRY
+7. Error lain → FAILED
+```
