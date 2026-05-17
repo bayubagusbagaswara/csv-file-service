@@ -3,6 +3,7 @@ package com.bayu.csvfileservice.controller;
 import com.bayu.csvfileservice.dto.ApiResponse;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.transaction.CreateSingleTransactionRequest;
+import com.bayu.csvfileservice.dto.transaction.RejectTransactionRequest;
 import com.bayu.csvfileservice.dto.transaction.SendTransactionRequest;
 import com.bayu.csvfileservice.model.enumerator.TransferMethod;
 import com.bayu.csvfileservice.service.ManagementFeeTransactionService;
@@ -51,6 +52,18 @@ public class ManagementFeeTransactionController {
         String userId = request.getInputId();
         List<Long> ids = request.getIds();
         ProcessResult result = managementFeeTransactionService.send(ids, userId, clientIp);
+        return ApiResponseBuilder.success(result);
+    }
+
+    @PostMapping("/reject")
+    public ResponseEntity<ApiResponse<ProcessResult>> reject(
+            @RequestBody RejectTransactionRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        String clientIp = ClientIpUtil.getClientIp(servletRequest);
+        String userId = request.getApproveId();
+        List<Long> ids = request.getIds();
+        ProcessResult result = managementFeeTransactionService.reject(ids, userId, clientIp);
         return ApiResponseBuilder.success(result);
     }
 
