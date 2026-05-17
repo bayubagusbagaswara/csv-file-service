@@ -1,95 +1,74 @@
 package com.bayu.csvfileservice.executor;
 
-import com.bayu.csvfileservice.model.DepositTransferMap;
+import com.bayu.csvfileservice.model.DepositTransferTransaction;
 import com.bayu.csvfileservice.model.ManagementFeeMap;
+import com.bayu.csvfileservice.model.enumerator.FeatureType;
 import com.bayu.csvfileservice.model.enumerator.ProcessType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-
-import java.math.BigDecimal;
-import java.util.List;
 
 @Component
 @Slf4j
 public class TransferableMapper {
 
     public Transferable fromManagementFeeMap(ManagementFeeMap e) {
+
         TransferableAdapter adapter = TransferableAdapter.builder()
+                .id(e.getId())
                 .transferMethod(e.getTransferMethod())
                 .transferScope(e.getTransferScope())
-                .featureType(e.getFeatureType())
+                .featureType(FeatureType.MANAGEMENT_FEE)
                 .processType(e.getProcessType())
                 .mappingStatus(e.getStatus())
 
-                .id(e.getId())
                 .debitAccount(e.getDebitAccount())
                 .creditAccount(e.getCreditAccount())
                 .amount(e.getAmount())
                 .description(e.getDescription())
+
+                .biCode(e.getBiCode())
+                .branchCode(e.getBranchCode())
+
+                // untuk ManagementFee, bisa pakai referenceCombination sebagai info reference
+                .siReferenceId(e.getReferenceCombination())
+
+                .bulkReferenceId(null)
                 .build();
 
         log.info("TransferableMapper fromManagementFeeMap: {}", adapter);
+
         return adapter;
     }
 
-    public Transferable fromDepositTransferMap(DepositTransferMap e) {
+    public Transferable fromDepositTransferTransaction(DepositTransferTransaction e) {
 
-        TransferableAdapter dto = new TransferableAdapter();
+        TransferableAdapter adapter = TransferableAdapter.builder()
+                .id(e.getId())
+                .transferMethod(e.getTransferMethod())
+                .transferScope(e.getTransferScope())
+                .featureType(FeatureType.DEPOSIT_TRANSFER)
+                .processType(e.getProcessType())
 
-        dto.setId(e.getId());
-        dto.setDebitAccount(e.getAccountDebitNo());
-        dto.setCreditAccount(e.getCashAccountNo());
-        dto.setAmount(e.getPrinciple());
-        dto.setDescription(e.getDescription());
-        dto.setTransferScope(e.getTransferScope());
+                .debitAccount(e.getAccountDebitNo())
+                .creditAccount(e.getCashAccountNo())
+                .amount(e.getTotalAmount())
+                .description(e.getDescription())
 
+                .biCode(e.getBiCode())
+                .branchCode(e.getBranchCode())
 
+                .bulkReferenceId(e.getBulkReferenceId())
 
-        dto.setProcessType(e.getProcessType());
-        dto.setBulkReferenceId(e.getBulkReferenceId());
-        dto.setSiReferenceId(e.getSiReferenceId());
+                .siReferenceId(
+                        ProcessType.BULK.equals(e.getProcessType())
+                                ? e.getBulkSiReferenceIds()
+                                : e.getSiReferenceId()
+                )
+                .build();
 
-        return dto;
-    }
+        log.info("TransferableMapper fromDepositTransferTransaction: {}", adapter);
 
-    public Transferable fromDepositTransferBulk(List<DepositTransferMap> list) {
-
-        if (list == null || list.isEmpty()) {
-            throw new IllegalArgumentException("Bulk data cannot be empty");
-        }
-
-        DepositTransferMap first = list.get(0);
-
-        BigDecimal totalAmount = BigDecimal.ZERO;
-        StringBuilder siReferenceBuilder = new StringBuilder();
-
-        for (int i = 0; i < list.size(); i++) {
-            DepositTransferMap item = list.get(i);
-
-            totalAmount = totalAmount.add(item.getPrinciple());
-
-            if (i > 0) {
-                siReferenceBuilder.append(", ");
-            }
-
-            siReferenceBuilder.append(item.getSiReferenceId());
-        }
-
-        TransferableAdapter dto = new TransferableAdapter();
-
-        dto.setId(first.getId());
-        dto.setDebitAccount(first.getAccountDebitNo());
-        dto.setCreditAccount(first.getCashAccountNo());
-        dto.setAmount(totalAmount);
-        dto.setDescription("Bulk Deposit Transfer - SI Reference: " + siReferenceBuilder);
-        dto.setTransferScope(first.getTransferScope());
-
-
-        dto.setProcessType(ProcessType.BULK);
-        dto.setBulkReferenceId(first.getBulkReferenceId());
-        dto.setSiReferenceId(siReferenceBuilder.toString());
-
-        return dto;
+        return adapter;
     }
 
 }
