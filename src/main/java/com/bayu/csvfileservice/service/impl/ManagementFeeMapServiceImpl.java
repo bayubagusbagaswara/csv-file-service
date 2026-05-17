@@ -2,7 +2,7 @@ package com.bayu.csvfileservice.service.impl;
 
 import com.bayu.csvfileservice.dto.ErrorDetail;
 import com.bayu.csvfileservice.dto.ProcessResult;
-import com.bayu.csvfileservice.dto.managementfee.CreateTransactionRequest;
+import com.bayu.csvfileservice.dto.transaction.CreateSingleTransactionRequest;
 import com.bayu.csvfileservice.exception.DataNotFoundException;
 import com.bayu.csvfileservice.executor.TransferOrchestratorService;
 import com.bayu.csvfileservice.executor.Transferable;
@@ -12,6 +12,7 @@ import com.bayu.csvfileservice.model.enumerator.*;
 import com.bayu.csvfileservice.repository.*;
 import com.bayu.csvfileservice.service.ManagementFeeMapService;
 import com.bayu.csvfileservice.util.BankCodeHelper;
+import com.bayu.csvfileservice.util.EnumConverter;
 import com.bayu.csvfileservice.util.TransferMethodValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -130,9 +131,10 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
 
     @Override
     @Transactional
-    public ProcessResult createTransactions(List<CreateTransactionRequest> items, String clientIp) {
+    public ProcessResult create(List<CreateSingleTransactionRequest> items, String clientIp) {
         ProcessResult result = new ProcessResult();
-        for (CreateTransactionRequest item : items) {
+        for (CreateSingleTransactionRequest item : items) {
+            TransferMethod transferMethod = EnumConverter.fromTransferMethod(item.getTransferMethod());
             try {
                 ManagementFeeMap entity = mapRepository.findById(item.getId())
                         .orElseThrow(() -> new IllegalArgumentException("Data not found"));
@@ -144,20 +146,20 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
                 // VALIDASI METHOD
                 validator.validate(
                         entity.getTransferScope(),
-                        item.getTransferMethod()
+                        transferMethod
                 );
 
                 // =============== Check range amount ===============
                 BigDecimal amount = entity.getAmount();
-                TransactionLimit transactionLimit = transactionLimitRepository.findByTransferMethod(item.getTransferMethod())
-                        .orElseThrow(() -> new DataNotFoundException("Transfer method " + item.getTransferMethod().getName() + " is not defined"));
+                TransactionLimit transactionLimit = transactionLimitRepository.findByTransferMethod(transferMethod)
+                        .orElseThrow(() -> new DataNotFoundException("Transfer method " + transferMethod.getName() + " is not defined"));
                 if (amount.compareTo(transactionLimit.getMinAmount()) < 0
                         || amount.compareTo(transactionLimit.getMaxAmount()) > 0) {
-                    throw new IllegalArgumentException("Amount " + amount + " is out of range for transfer method " + item.getTransferMethod().getName());
+                    throw new IllegalArgumentException("Amount " + amount + " is out of range for transfer method " + transferMethod.getName());
                 }
 
                 // =============== Set Transfer Method to Entity ================
-                entity.setTransferMethod(item.getTransferMethod());
+                entity.setTransferMethod(transferMethod);
                 entity.setStatus(MappingStatus.READY);
 
                 // =============== Save entity ==================
@@ -178,7 +180,7 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
     }
 
     @Override
-    public ProcessResult sendTransactions(List<Long> ids, String clientIp) {
+    public ProcessResult send(List<Long> ids, String userId, String clientIp) {
         ProcessResult result = new ProcessResult();
         List<ManagementFeeMap> list = mapRepository.findAllById(ids);
 
