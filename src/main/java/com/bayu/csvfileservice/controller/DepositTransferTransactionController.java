@@ -3,9 +3,12 @@ package com.bayu.csvfileservice.controller;
 import com.bayu.csvfileservice.dto.ApiResponse;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.deposittransfer.transaction.*;
+import com.bayu.csvfileservice.model.enumerator.ProcessType;
+import com.bayu.csvfileservice.model.enumerator.TransferMethod;
 import com.bayu.csvfileservice.service.DepositTransferTransactionService;
 import com.bayu.csvfileservice.util.ApiResponseBuilder;
 import com.bayu.csvfileservice.util.ClientIpUtil;
+import com.bayu.csvfileservice.util.EnumConverter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -26,86 +29,75 @@ public class DepositTransferTransactionController {
         this.transactionService = transactionService;
     }
 
-    // create single transaction
     @PostMapping("/single")
-    public ResponseEntity<ApiResponse<ProcessResult>> createSingleTransaction(
+    public ResponseEntity<ApiResponse<ProcessResult>> createSingle(
             @RequestBody CreateSingleDepositTransferTransactionRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
         String userId = request.getInputId();
+        Long id = request.getId();
+        TransferMethod transferMethod = EnumConverter.fromTransferMethod(request.getTransferMethod());
 
-        ProcessResult processResult = transactionService.createSingleTransaction(
-                request,
-                userId,
-                clientIp
-        );
-
+        ProcessResult processResult = transactionService.createSingle(id, transferMethod, userId, clientIp);
         return ApiResponseBuilder.success(processResult);
     }
 
-    // create bulk transaction
     @PostMapping("/bulk")
-    public ResponseEntity<ApiResponse<ProcessResult>> createBulkTransaction(
+    public ResponseEntity<ApiResponse<ProcessResult>> createBulk(
             @RequestBody CreateBulkDepositTransferTransactionRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
         String userId = request.getInputId();
+        List<Long> ids = request.getIds();
+        TransferMethod transferMethod = EnumConverter.fromTransferMethod(request.getTransferMethod());
 
-        ProcessResult processResult = transactionService.createBulkTransaction(
-                request,
-                userId,
-                clientIp
-        );
-
+        ProcessResult processResult = transactionService.createBulk(ids, transferMethod, userId, clientIp);
         return ApiResponseBuilder.success(processResult);
     }
 
-    // send transaction
     @PostMapping("/send")
-    public ResponseEntity<ApiResponse<ProcessResult>> sendTransaction(
+    public ResponseEntity<ApiResponse<ProcessResult>> send(
             @RequestBody SendDepositTransferTransactionRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
         String userId = request.getInputId();
+        List<Long> ids = request.getIds();
 
-        ProcessResult processResult = transactionService.sendTransaction(
-                request,
-                userId,
-                clientIp
-        );
-
+        ProcessResult processResult = transactionService.send(ids, userId, clientIp);
         return ApiResponseBuilder.success(processResult);
     }
 
-    // reject transaction
     @PostMapping("/reject")
-    public ResponseEntity<ApiResponse<ProcessResult>> rejectTransaction(
+    public ResponseEntity<ApiResponse<ProcessResult>> reject(
             @RequestBody RejectDepositTransferTransactionRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
         String userId = request.getApproveId();
+        List<Long> ids = request.getIds();
 
-        ProcessResult processResult = transactionService.rejectTransaction(
-                request,
-                userId,
-                clientIp
-        );
-
+        ProcessResult processResult = transactionService.reject(ids, userId, clientIp);
         return ApiResponseBuilder.success(processResult);
     }
 
-    // get all transaction by current date
     @GetMapping("/current")
-    public ResponseEntity<ApiResponse<List<DepositTransferTransactionDto>>> getAllTransactionByCurrentDate() {
+    public ResponseEntity<ApiResponse<List<DepositTransferTransactionDto>>> getAllByCurrentDate() {
         LocalDate currentDate = LocalDate.now();
-
-        List<DepositTransferTransactionDto> list =
-                transactionService.getAllTransactionByCurrentDate(currentDate);
-
+        List<DepositTransferTransactionDto> list = transactionService.getAllByCurrentDate(currentDate);
         return ApiResponseBuilder.success(list);
     }
+
+    @GetMapping("/process-type/current")
+    public ResponseEntity<ApiResponse<List<DepositTransferTransactionDto>>> getAllByProcessTypeAndCurrentDate(
+            @RequestParam("type") String type
+    ) {
+        LocalDate currentDate = LocalDate.now();
+        ProcessType processType = EnumConverter.fromProcessType(type);
+        List<DepositTransferTransactionDto> list = transactionService.getAllByProcessTypeAndCurrentDate(processType, currentDate);
+        return ApiResponseBuilder.success(list);
+    }
+
 }
