@@ -1,14 +1,18 @@
 package com.bayu.csvfileservice.dto;
 
 import com.bayu.csvfileservice.model.enumerator.*;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class CreateNcbsResponse {
 
     private LocalDateTime createdDate;
