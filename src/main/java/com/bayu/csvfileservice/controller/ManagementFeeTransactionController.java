@@ -4,7 +4,7 @@ import com.bayu.csvfileservice.dto.ApiResponse;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.transaction.CreateSingleTransactionRequest;
 import com.bayu.csvfileservice.dto.transaction.SendTransactionRequest;
-import com.bayu.csvfileservice.service.ManagementFeeMapService;
+import com.bayu.csvfileservice.service.ManagementFeeTransactionService;
 import com.bayu.csvfileservice.util.ApiResponseBuilder;
 import com.bayu.csvfileservice.util.ClientIpUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,31 +20,31 @@ import java.util.List;
 @RequestMapping("/api/management-fee/transactions")
 public class ManagementFeeTransactionController {
 
-    private final ManagementFeeMapService service;
+    private final ManagementFeeTransactionService managementFeeTransactionService;
 
-    public ManagementFeeTransactionController(ManagementFeeMapService service) {
-        this.service = service;
+    public ManagementFeeTransactionController(ManagementFeeTransactionService managementFeeTransactionService) {
+        this.managementFeeTransactionService = managementFeeTransactionService;
     }
 
     @PostMapping("/create")
-    public ResponseEntity<ApiResponse<ProcessResult>> createTransactions(
+    public ResponseEntity<ApiResponse<ProcessResult>> create(
             @RequestBody List<CreateSingleTransactionRequest> requests,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
-        ProcessResult result = service.create(requests, clientIp);
+        ProcessResult result = managementFeeTransactionService.create(requests, clientIp);
         return ApiResponseBuilder.success(result);
     }
 
     @PostMapping("/send")
-    public ResponseEntity<ApiResponse<ProcessResult>> sendTransactions(
+    public ResponseEntity<ApiResponse<ProcessResult>> send(
             @RequestBody SendTransactionRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
         String userId = request.getInputId();
         List<Long> ids = request.getIds();
-        ProcessResult result = service.send(ids, userId, clientIp);
+        ProcessResult result = managementFeeTransactionService.send(ids, userId, clientIp);
         return ApiResponseBuilder.success(result);
     }
 
