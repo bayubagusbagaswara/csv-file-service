@@ -2,7 +2,7 @@ package com.bayu.csvfileservice.mapper;
 
 import com.bayu.csvfileservice.dto.managementfee.ManagementFeeDto;
 import com.bayu.csvfileservice.dto.managementfee.ManagementFeeRequest;
-import com.bayu.csvfileservice.model.ManagementFeeRaw;
+import com.bayu.csvfileservice.model.ManagementFee;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
@@ -21,9 +21,9 @@ public interface ManagementFeeMapper {
 //    @Mapping(target = "year", ignore = true)
     ManagementFeeDto fromRequestToDto(ManagementFeeRequest request);
 
-    ManagementFeeDto toDto(ManagementFeeRaw entity);
+    ManagementFeeDto toDto(ManagementFee entity);
 
-    ManagementFeeDto fromEntityToDto(ManagementFeeRaw entity);
+    ManagementFeeDto fromEntityToDto(ManagementFee entity);
 
     default String createReferenceCombination(String fundCode, String amount) {
         if (fundCode == null || amount == null) {
