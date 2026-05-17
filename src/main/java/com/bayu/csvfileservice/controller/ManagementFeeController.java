@@ -6,8 +6,8 @@ import com.bayu.csvfileservice.dto.DeleteIdRequest;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.datachange.DataChangeDto;
 import com.bayu.csvfileservice.dto.managementfee.ManagementFeeBulkRequest;
-import com.bayu.csvfileservice.model.ManagementFeeRaw;
-import com.bayu.csvfileservice.service.ManagementFeeRawService;
+import com.bayu.csvfileservice.model.ManagementFee;
+import com.bayu.csvfileservice.service.ManagementFeeService;
 import com.bayu.csvfileservice.util.ApiResponseBuilder;
 import com.bayu.csvfileservice.util.ClientIpUtil;
 import com.bayu.csvfileservice.util.DataChangeFactory;
@@ -30,7 +30,7 @@ public class ManagementFeeController {
     private static final String BASE_URL = "/api/management-fee";
     private static final String MENU_NAME = "Management Fee";
 
-    private final ManagementFeeRawService managementFeeService;
+    private final ManagementFeeService managementFeeService;
     private final DataChangeFactory dataChangeFactory;
 
     @PostMapping(path = "/upload")
@@ -64,8 +64,8 @@ public class ManagementFeeController {
     }
 
     @GetMapping(path = "/all")
-    public ResponseEntity<ApiResponse<List<ManagementFeeRaw>>> getAll() {
-        List<ManagementFeeRaw> list = managementFeeService.getAll();
+    public ResponseEntity<ApiResponse<List<ManagementFee>>> getAll() {
+        List<ManagementFee> list = managementFeeService.getAll();
         return ApiResponseBuilder.success(list);
     }
 
