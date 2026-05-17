@@ -12,12 +12,12 @@ import com.bayu.csvfileservice.mapper.DataChangeHelperMapper;
 import com.bayu.csvfileservice.mapper.DataChangeMapper;
 import com.bayu.csvfileservice.mapper.ManagementFeeMapper;
 import com.bayu.csvfileservice.model.DataChange;
-import com.bayu.csvfileservice.model.ManagementFeeRaw;
+import com.bayu.csvfileservice.model.ManagementFee;
 import com.bayu.csvfileservice.model.enumerator.ApprovalStatus;
 import com.bayu.csvfileservice.model.enumerator.Month;
 import com.bayu.csvfileservice.repository.ManagementFeeRawRepository;
 import com.bayu.csvfileservice.service.DataChangeService;
-import com.bayu.csvfileservice.service.ManagementFeeRawService;
+import com.bayu.csvfileservice.service.ManagementFeeService;
 import com.bayu.csvfileservice.util.JsonHelper;
 import com.bayu.csvfileservice.util.ValidationData;
 import jakarta.validation.ConstraintViolation;
@@ -35,7 +35,7 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
+public class ManagementFeeServiceImpl implements ManagementFeeService {
 
     private static final String DATA_CHANGE_ID_FIELD = "dataChangeId";
 
@@ -100,7 +100,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
             }
 
             // Build Entity
-            ManagementFeeRaw managementFeeRaw = ManagementFeeRaw.builder()
+            ManagementFee managementFee = ManagementFee.builder()
                     .month(month)
                     .year(year)
                     .mutualFundName(afterPayload.getMutualFundName())
@@ -120,17 +120,17 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                     .build();
 
             // Set Approval fields ke entity
-            setApprovalFields(managementFeeRaw, dataChange, userId, clientIp, now);
-            managementFeeRawRepository.save(managementFeeRaw);
+            setApprovalFields(managementFee, dataChange, userId, clientIp, now);
+            managementFeeRawRepository.save(managementFee);
 
             // Update Data Change dengan ID yang sudah dibuat
-            setApprovalFieldsToDataChange(dataChange, userId, clientIp, managementFeeRaw.getId(), now);
+            setApprovalFieldsToDataChange(dataChange, userId, clientIp, managementFee.getId(), now);
 
             // UPDATE: Simpan DTO lengkap (termasuk id, month, year) di jsonAfter setelah approve
-            ManagementFeeDto completeDto = managementFeeMapper.toDto(managementFeeRaw);
+            ManagementFeeDto completeDto = managementFeeMapper.toDto(managementFee);
             dataChange.setJsonDataAfter(jsonHelper.toJson(completeDto));
 
-            dataChange.setDescription("Success approve insert of management fee with id: " + managementFeeRaw.getId());
+            dataChange.setDescription("Success approve insert of management fee with id: " + managementFee.getId());
             dataChangeService.setApprovalStatusIsApproved(dataChange);
             processResult.addSuccess();
 
@@ -148,7 +148,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
     }
 
     @Override
-    public List<ManagementFeeRaw> getAll() {
+    public List<ManagementFee> getAll() {
         return managementFeeRawRepository.findAll();
     }
 
@@ -158,7 +158,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
         ProcessResult processResult = new ProcessResult();
         try {
             // 1. Get entity
-            ManagementFeeRaw entity = managementFeeRawRepository.findById(id)
+            ManagementFee entity = managementFeeRawRepository.findById(id)
                     .orElseThrow(() -> new DataNotFoundException("ManagementFeeRaw not found with id: " + id));
 
             // 2. Map to ManagementFeeDto
@@ -176,7 +176,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
             log.info("id: {}", id);
 
             // 6. Create delete action
-            dataChangeService.createChangeActionDelete(dataChange, ManagementFeeRaw.class);
+            dataChangeService.createChangeActionDelete(dataChange, ManagementFee.class);
 
             processResult.addSuccess();
 
@@ -205,12 +205,12 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                     ? Long.valueOf(dataChange.getEntityId())
                     : null;
 
-            Optional<ManagementFeeRaw> optional = entityId != null
+            Optional<ManagementFee> optional = entityId != null
                     ? managementFeeRawRepository.findById(entityId)
                     : Optional.empty();
 
             if (optional.isPresent()) {
-                ManagementFeeRaw entity = optional.get();
+                ManagementFee entity = optional.get();
 
                 // Set approval ke dataChange
                 setApprovalFieldsToDataChange(dataChange, userId, clientIp, entity.getId(), now);
@@ -297,7 +297,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
             DataChangeDto dto = dataChangeHelperMapper.forAdd(dataChangeDto, feeDto);
             DataChange entity = dataChangeMapper.toEntity(dto);
 
-            dataChangeService.createChangeActionAdd(entity, ManagementFeeRaw.class);
+            dataChangeService.createChangeActionAdd(entity, ManagementFee.class);
 
         } catch (Exception e) {
             log.error("Unexpected error for fundCode {}", request.getFundCode(), e);
@@ -334,7 +334,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
     }
 
     private void setApprovalFields(
-            ManagementFeeRaw entity,
+            ManagementFee entity,
             DataChange dataChange,
             String userId,
             String clientIp,
