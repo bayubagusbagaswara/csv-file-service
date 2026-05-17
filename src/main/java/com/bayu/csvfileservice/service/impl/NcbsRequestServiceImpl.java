@@ -23,7 +23,7 @@ public class NcbsRequestServiceImpl implements NcbsRequestService {
         if (isReferenceIdAlreadyExists(request.getReferenceId())) {
             log.info("Transaction for ReferenceId {} has been approved (send transaction).", request.getReferenceId());
 
-            if (request.getFeatureType().equals(FeatureType.PLACEMENT_DEPOSIT_TRANSFER)) {
+            if (request.getFeatureType().equals(FeatureType.DEPOSIT_TRANSFER)) {
                 throw new IllegalStateException(
                         "Transaction for DepositTransfer with SiReferenceId " + request.getSiReferenceId() + " has been approved."
                 );
