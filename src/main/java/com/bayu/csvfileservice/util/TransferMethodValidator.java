@@ -8,16 +8,38 @@ import org.springframework.stereotype.Component;
 public class TransferMethodValidator {
 
     public void validate(TransferScope scope, TransferMethod method) {
-        boolean isOverbooking =
-                method == TransferMethod.OVERBOOKING_CASA_TO_CASA
-                        || method == TransferMethod.OVERBOOKING_CASA_TO_GL;
 
-        if (scope == TransferScope.INTERNAL && !isOverbooking) {
-            throw new IllegalArgumentException("INTERNAL can only user OVERBOOKING_CASA_TO_CASA or OVERBOOKING_CASA_TO_GL");
+        if (scope == null) {
+            throw new IllegalArgumentException("Transfer scope is required");
         }
 
-        if (scope == TransferScope.EXTERNAL && isOverbooking) {
-            throw new IllegalArgumentException("EXTERNAL may not use OVERBOOKING");
+        if (method == null) {
+            throw new IllegalArgumentException("Transfer method is required");
+        }
+
+        if (scope == TransferScope.INTERNAL) {
+            if (method != TransferMethod.OVERBOOKING) {
+                throw new IllegalArgumentException(
+                        "INTERNAL transfer can only use OVERBOOKING"
+                );
+            }
+            return;
+        }
+
+        if (scope == TransferScope.EXTERNAL) {
+            if (method == TransferMethod.OVERBOOKING) {
+                throw new IllegalArgumentException(
+                        "EXTERNAL transfer may not use OVERBOOKING"
+                );
+            }
+
+            if (method != TransferMethod.BI_FAST
+                    && method != TransferMethod.SKN
+                    && method != TransferMethod.RTGS) {
+                throw new IllegalArgumentException(
+                        "EXTERNAL transfer can only use BI_FAST, SKN, or RTGS"
+                );
+            }
         }
     }
 
