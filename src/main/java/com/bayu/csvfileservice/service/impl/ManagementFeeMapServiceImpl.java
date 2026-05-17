@@ -3,130 +3,232 @@ package com.bayu.csvfileservice.service.impl;
 import com.bayu.csvfileservice.dto.ErrorDetail;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.exception.DataNotFoundException;
-import com.bayu.csvfileservice.executor.TransferOrchestratorService;
-import com.bayu.csvfileservice.executor.TransferableMapper;
-import com.bayu.csvfileservice.model.*;
+import com.bayu.csvfileservice.model.DebitAccountProduct;
+import com.bayu.csvfileservice.model.ManagementFee;
+import com.bayu.csvfileservice.model.ManagementFeeMap;
+import com.bayu.csvfileservice.model.MasterBank;
 import com.bayu.csvfileservice.model.enumerator.MappingStatus;
 import com.bayu.csvfileservice.model.enumerator.Month;
-import com.bayu.csvfileservice.model.enumerator.NcbsStatus;
 import com.bayu.csvfileservice.model.enumerator.TransferScope;
-import com.bayu.csvfileservice.repository.*;
+import com.bayu.csvfileservice.repository.DebitAccountProductRepository;
+import com.bayu.csvfileservice.repository.ManagementFeeMapRepository;
+import com.bayu.csvfileservice.repository.ManagementFeeRepository;
+import com.bayu.csvfileservice.repository.MasterBankRepository;
 import com.bayu.csvfileservice.service.ManagementFeeMapService;
 import com.bayu.csvfileservice.util.BankCodeHelper;
-import com.bayu.csvfileservice.util.TransferMethodValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
 
-    private final ManagementFeeRepository rawRepository;
-    private final ManagementFeeMapRepository mapRepository;
-    private final MasterBankRepository masterBankRepository;
-    private final DebitAccountProductRepository debitRepository;
-    private final NcbsRequestRepository ncbsRequestRepository;
-    private final NcbsResponseRepository ncbsResponseRepository;
-    private final BankCodeHelper bankHelper;
-    private final TransferMethodValidator validator;
-    private final ResponseCodeRepository responseCodeRepository;
-    private final TransactionLimitRepository transactionLimitRepository;
-    private final TransferableMapper transferableMapper;
-    private final TransferOrchestratorService orchestratorService;
+    private static final String PERIOD = "period";
+    private static final String FUND_CODE = "fundCode";
+    private static final String REFERENCE_COMBINATION = "referenceCombination";
 
+    private final ManagementFeeRepository managementFeeRepository;
+    private final ManagementFeeMapRepository managementFeeMapRepository;
+
+    private final MasterBankRepository masterBankRepository;
+    private final DebitAccountProductRepository debitAccountProductRepository;
+
+    private final BankCodeHelper bankHelper;
 
     @Override
     @Transactional
     public ProcessResult map(Month month, Integer year, String clientIp) {
         ProcessResult result = new ProcessResult();
 
-        mapRepository.deleteByMonthAndYearAndStatus(month, year, MappingStatus.DRAFT);
+        // 1. Validasi parameter periode.
+        // Jika month/year tidak valid, exception akan dilempar ke GlobalExceptionHandler.
+        validateMapRequest(month, year);
 
-        List<ManagementFee> feeRawList = rawRepository.findAllByMonthAndYear(month, year);
+        // 2. Ambil data mentah ManagementFee berdasarkan month dan year.
+        List<ManagementFee> rawList = managementFeeRepository.findAllByMonthAndYear(month, year);
 
-        if (feeRawList.isEmpty()) {
-            log.warn("No raw data found for {} {}", month, year);
+        // 3. Jika raw data kosong, proses selesai.
+        if (rawList.isEmpty()) {
+            log.warn("No Management Fee raw data found. month={}, year={}", month, year);
+            result.addError(
+                    ErrorDetail.of(
+                            PERIOD,
+                            month + " " + year,
+                            Collections.singletonList("No Management Fee raw data found. month=" + month + ", year=" + year)));
             return result;
         }
 
-        for (ManagementFee raw : feeRawList) {
+        // 4. Hitung duplicate referenceCombination dalam periode tersebut.
+        Map<String, Long> duplicateCounter = rawList.stream()
+                .filter(item -> item.getReferenceCombination() != null)
+                .collect(Collectors.groupingBy(
+                        ManagementFee::getReferenceCombination,
+                        Collectors.counting()
+                ));
+
+        // 5. Loop data raw.
+        for (ManagementFee raw : rawList) {
+
+            String referenceCombination = raw.getReferenceCombination();
+
             try {
+                // 6. Validasi field minimal untuk mapping.
                 validateRaw(raw);
 
-                // ================= Check by Reference Combination ===============
-                if (mapRepository.existsByReferenceCombination(raw.getReferenceCombination())) {
+                // 7. Validasi referenceCombination.
+                if (referenceCombination == null || referenceCombination.trim().isEmpty()) {
+                    throw new IllegalArgumentException("referenceCombination is required");
+                }
+
+                // 8. Cek duplicate referenceCombination dalam periode yang sama.
+                boolean duplicateInSamePeriod = duplicateCounter.get(referenceCombination) != null
+                        && duplicateCounter.get(referenceCombination) > 1;
+
+                if (duplicateInSamePeriod) {
                     throw new IllegalStateException(
-                            "ManagementFee has been mapped with fundCode " + raw.getFundCode() + ", month " + raw.getMonth().getLabel()
-                            + ", year " + raw.getYear() + ", amount " + raw.getAmount()
+                            "Duplicate Management Fee detail detected for referenceCombination: "
+                                    + referenceCombination
                     );
                 }
 
-                // ================= SPLIT BANK =================
-                String rawCode = raw.getBankCode();
+                // 9. Cek apakah referenceCombination sudah masuk transaksi aktif.
+                boolean alreadyExistsAsActiveData =
+                        managementFeeMapRepository.existsByReferenceCombinationAndStatusIn(
+                                referenceCombination,
+                                Arrays.asList(
+                                        MappingStatus.READY,
+                                        MappingStatus.SENT,
+                                        MappingStatus.SUCCESS,
+                                        MappingStatus.RETRY
+                                )
+                        );
 
-                String bankCode = bankHelper.extractBankCode(rawCode);
-                String branchCode = bankHelper.extractBranchCode(rawCode);
-                String formatted = bankHelper.formatBankCode(bankCode);
+                if (alreadyExistsAsActiveData) {
+                    result.addError(
+                            ErrorDetail.of(
+                                    REFERENCE_COMBINATION,
+                                    referenceCombination,
+                                    Collections.singletonList(
+                                            "Management Fee already exists with active transaction status"
+                                    )
+                            )
+                    );
+                    continue;
+                }
 
-                // ================= MASTER BANK =================
-                MasterBank bank = masterBankRepository
-                        .findByBankCode(formatted)
-                        .orElseThrow(() -> new DataNotFoundException("MasterBank not found: " + formatted));
+                // 10. Jika data lama masih DRAFT dengan referenceCombination yang sama,
+                // maka boleh direplace dengan hasil mapping terbaru.
+                managementFeeMapRepository.deleteByReferenceCombinationAndStatus(
+                        referenceCombination,
+                        MappingStatus.DRAFT
+                );
 
-                // ================= TRANSFER SCOPE =================
-                TransferScope scope = bankHelper.resolveScope(branchCode);
+                // 11. Parse raw bankCode.
+                String rawBankCode = raw.getBankCode();
 
-                // ================= DEBIT ACCOUNT =================
-                DebitAccountProduct dap = debitRepository.findByFundCode(raw.getFundCode())
-                        .orElseThrow(() -> new DataNotFoundException("DebitAccountProduct not found: " + raw.getFundCode()));
+                String extractedBankCode = bankHelper.extractBankCode(rawBankCode);
+                String branchCode = bankHelper.extractBranchCode(rawBankCode);
+                String formattedBankCode = bankHelper.formatBankCode(extractedBankCode);
 
+                // 12. Lookup MasterBank.
+                MasterBank masterBank = masterBankRepository
+                        .findByBankCode(formattedBankCode)
+                        .orElseThrow(() -> new DataNotFoundException(
+                                "MasterBank not found with bankCode: " + formattedBankCode
+                        ));
 
-                // ================= BUILD MAP =================
+                // 13. Resolve TransferScope.
+                TransferScope transferScope = bankHelper.resolveScope(branchCode);
+
+                // 14. Lookup DebitAccountProduct.
+                DebitAccountProduct debitAccountProduct = debitAccountProductRepository
+                        .findByFundCode(raw.getFundCode())
+                        .orElseThrow(() -> new DataNotFoundException(
+                                "DebitAccountProduct not found with fundCode: " + raw.getFundCode()
+                        ));
+
+                // 15. Build ManagementFeeMap.
                 ManagementFeeMap map = ManagementFeeMap.builder()
-                        .fundCode(raw.getFundCode())
                         .month(raw.getMonth())
                         .year(raw.getYear())
                         .mutualFundName(raw.getMutualFundName())
                         .investmentManager(raw.getInvestmentManager())
+                        .fundCode(raw.getFundCode())
+
+                        .debitAccount(debitAccountProduct.getCashAccount())
                         .amount(raw.getAmount())
                         .creditAccount(raw.getCreditAccount())
                         .beneficiaryName(raw.getBeneficiaryName())
+
                         .bankName(raw.getBankName())
                         .paymentInstructions(raw.getPaymentInstructions())
                         .paymentType(raw.getPaymentType())
                         .period(raw.getPeriod())
                         .description(raw.getDescription())
-                        // normalized
-                        .bankCode(bank.getBankCode())
+
+                        .bankCode(masterBank.getBankCode())
                         .branchCode(branchCode)
-                        // enrichment
-                        .biCode(bank.getBiCode())
-                        .transferScope(scope)
-                        .debitAccount(dap.getCashAccount())
+                        .biCode(masterBank.getBiCode())
+                        .transferScope(transferScope)
+
+                        .transferMethod(null)
+                        .referenceId(null)
+                        .inquiryReferenceId(null)
+                        .retryCount(0)
+                        .lastSentDate(null)
+
                         .status(MappingStatus.DRAFT)
-                        .referenceCombination(raw.getReferenceCombination())
+                        .referenceCombination(referenceCombination)
                         .build();
 
-                mapRepository.save(map);
+                // 16. Simpan hasil mapping.
+                managementFeeMapRepository.save(map);
+
                 result.addSuccess();
+
             } catch (Exception e) {
-                log.error("Mapping failed fundCode {}", raw.getFundCode(), e);
-                result.addError(ErrorDetail.of(
-                                "fundCode",
-                                raw.getFundCode(),
-                                List.of(e.getMessage())));
+                log.error(
+                        "Failed to map Management Fee. referenceCombination={}, fundCode={}, month={}, year={}",
+                        referenceCombination,
+                        raw.getFundCode(),
+                        raw.getMonth(),
+                        raw.getYear(),
+                        e
+                );
+
+                result.addError(
+                        ErrorDetail.of(
+                                "referenceCombination",
+                                referenceCombination,
+                                Collections.singletonList(e.getMessage())
+                        )
+                );
             }
         }
+
         return result;
     }
 
 
     // ======================= HELPER =======================
+
+    private void validateMapRequest(Month month, Integer year) {
+        if (month == null) {
+            throw new IllegalArgumentException("Month is required");
+        }
+        if (year == null) {
+            throw new IllegalArgumentException("Year is required");
+        }
+    }
 
     private void validateRaw(ManagementFee raw) {
         if (raw.getBankCode() == null || raw.getBankCode().length() < 7) {
@@ -136,14 +238,6 @@ public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
         if (raw.getFundCode() == null) {
             throw new IllegalArgumentException("FundCode is required");
         }
-    }
-
-
-    private boolean checkIfInsufficientBalance(String responseCode) {
-        List<String> list = responseCodeRepository.findAllByName(NcbsStatus.INSUFFICIENT_BALANCE.name()).stream()
-                .map(ResponseCode::getCode)
-                .toList();
-        return list.contains(responseCode);
     }
 
 }
