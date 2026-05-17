@@ -53,4 +53,6 @@ public interface DepositTransferMapRepository extends JpaRepository<DepositTrans
             MappingStatus mappingStatus
     );
 
+    List<DepositTransferMap> findAllByTransactionId(Long id);
+
 }
