@@ -1,5 +1,9 @@
 package com.bayu.csvfileservice.service;
 
+import com.bayu.csvfileservice.dto.apiresponse.overbookingcasatocasa.OverbookingCasaToCasaRequest;
+import com.bayu.csvfileservice.dto.apiresponse.overbookingcasatocasa.OverbookingCasaToCasaResponse;
+import com.bayu.csvfileservice.dto.apiresponse.overbookingcasatogl.OverbookingCasaToGlRequest;
+import com.bayu.csvfileservice.dto.apiresponse.overbookingcasatogl.OverbookingCasaToGlResponse;
 import com.bayu.csvfileservice.executor.BaseTransferExecutor;
 import com.bayu.csvfileservice.executor.TransferExecutionResult;
 import com.bayu.csvfileservice.executor.Transferable;
@@ -70,8 +74,7 @@ public class OverbookingExecutor extends BaseTransferExecutor {
                 request
         );
 
-        OverbookingResponse response =
-                middlewareService.overbookingCasaToCasa(referenceId, request);
+        OverbookingCasaToCasaResponse response = middlewareService.overbookingCasaToCasa(referenceId, request);
 
         NcbsResponse ncbsResponse = createNcbsResponse(
                 item,
@@ -96,7 +99,7 @@ public class OverbookingExecutor extends BaseTransferExecutor {
                 request
         );
 
-        OverbookingResponse response = middlewareService.overbookingCasaToGl(referenceId, request);
+        OverbookingCasaToGlResponse response = middlewareService.overbookingCasaToGl(referenceId, request);
 
         NcbsResponse ncbsResponse = createNcbsResponse(
                 item,
@@ -110,19 +113,19 @@ public class OverbookingExecutor extends BaseTransferExecutor {
 
     private OverbookingCasaToCasaRequest buildCasaToCasaRequest(Transferable item) {
         return OverbookingCasaToCasaRequest.builder()
-                .debitAccount(item.getDebitAccount())
-                .creditAccount(item.getCreditAccount())
-                .amount(item.getAmount())
-                .description(item.getDescription())
+                //.debitAccount(item.getDebitAccount())
+//                .creditAccount(item.getCreditAccount())
+//                .amount(item.getAmount())
+//                .description(item.getDescription())
                 .build();
     }
 
     private OverbookingCasaToGlRequest buildCasaToGlRequest(Transferable item) {
         return OverbookingCasaToGlRequest.builder()
-                .debitAccount(item.getDebitAccount())
-                .glAccount(item.getCreditAccount())
-                .amount(item.getAmount())
-                .description(item.getDescription())
+//                .debitAccount(item.getDebitAccount())
+//                .glAccount(item.getCreditAccount())
+//                .amount(item.getAmount())
+//                .description(item.getDescription())
                 .build();
     }
 }
