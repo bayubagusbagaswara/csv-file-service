@@ -4,13 +4,13 @@ import com.bayu.csvfileservice.dto.ErrorDetail;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.deposittransfer.transaction.DepositTransferTransactionDto;
 import com.bayu.csvfileservice.exception.DataNotFoundException;
+import com.bayu.csvfileservice.executor.TransferExecutionResult;
 import com.bayu.csvfileservice.executor.TransferOrchestratorService;
 import com.bayu.csvfileservice.executor.Transferable;
 import com.bayu.csvfileservice.executor.TransferableAdapter;
 import com.bayu.csvfileservice.mapper.DepositTransferTransactionMapper;
 import com.bayu.csvfileservice.model.DepositTransferMap;
 import com.bayu.csvfileservice.model.DepositTransferTransaction;
-import com.bayu.csvfileservice.model.NcbsResponse;
 import com.bayu.csvfileservice.model.enumerator.*;
 import com.bayu.csvfileservice.repository.DepositTransferMapRepository;
 import com.bayu.csvfileservice.repository.DepositTransferTransactionRepository;
@@ -267,16 +267,18 @@ public class DepositTransferTransactionServiceImpl implements DepositTransferTra
 
                 // 11. Kirim transaksi ke middleware melalui orchestrator.
                 // Orchestrator akan memilih executor berdasarkan transferMethod.
-                NcbsResponse response = transferOrchestratorService.execute(transferable);
+                TransferExecutionResult executionResult = transferOrchestratorService.execute(transferable);
+
+                transaction.setInquiryReferenceId(executionResult.getInquiryReferenceId());
 
                 // 12. Simpan referenceId dari middleware response.
-                transaction.setReferenceId(response.getReferenceId());
+                transaction.setReferenceId(executionResult.getReferenceId());
 
                 // 13. Tentukan final transactionStatus berdasarkan responseCode.
                 // SUCCESS jika response code sukses.
                 // RETRY jika saldo kurang.
                 // FAILED untuk error lain.
-                applyResponseStatus(transaction, response);
+                applyResponseStatus(transaction, executionResult);
 
                 // 14. Send transaction dianggap sebagai approval.
                 // Maka approvalStatus berubah dari PENDING menjadi APPROVED.
@@ -709,14 +711,14 @@ public class DepositTransferTransactionServiceImpl implements DepositTransferTra
     // =========================================================
     private void applyResponseStatus(
             DepositTransferTransaction transaction,
-            NcbsResponse response
+            TransferExecutionResult executionResult
     ) {
-        if (response == null) {
+        if (executionResult== null) {
             transaction.setTransactionStatus(TransactionStatus.FAILED);
             return;
         }
 
-        String responseCode = response.getResponseCode();
+        String responseCode = executionResult.getResponseCode();
 
         if (responseCodeService.isSuccess(responseCode)) {
             transaction.setTransactionStatus(TransactionStatus.SUCCESS);
