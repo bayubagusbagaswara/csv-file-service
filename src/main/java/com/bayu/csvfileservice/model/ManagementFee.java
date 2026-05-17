@@ -13,12 +13,12 @@ import java.math.BigDecimal;
 
 @EqualsAndHashCode(callSuper = true)
 @Entity
-@Table(name = "management_fee_raw")
+@Table(name = "management_fee")
 @Data
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ManagementFeeRaw extends BaseApproval {
+public class ManagementFee extends BaseApproval {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
