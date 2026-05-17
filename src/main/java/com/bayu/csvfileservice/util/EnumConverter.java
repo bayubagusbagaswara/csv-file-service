@@ -1,9 +1,6 @@
 package com.bayu.csvfileservice.util;
 
-import com.bayu.csvfileservice.model.enumerator.ApprovalStatus;
-import com.bayu.csvfileservice.model.enumerator.MappingStatus;
-import com.bayu.csvfileservice.model.enumerator.Month;
-import com.bayu.csvfileservice.model.enumerator.TransferMethod;
+import com.bayu.csvfileservice.model.enumerator.*;
 import lombok.experimental.UtilityClass;
 
 import java.util.Arrays;
@@ -61,6 +58,18 @@ public class EnumConverter {
         }
     }
 
-
+    public static ProcessType fromProcessType(String type) {
+        try {
+            return ProcessType.valueOf(type.toUpperCase());
+        } catch (Exception e) {
+            throw new IllegalArgumentException(
+                    String.format(
+                            "Invalid process type: '%s'. Allowed values are: %s",
+                            type,
+                            Arrays.toString(ProcessType.values())
+                    )
+            );
+        }
+    }
 
 }
