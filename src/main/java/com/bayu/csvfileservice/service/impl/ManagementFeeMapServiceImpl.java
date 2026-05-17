@@ -26,7 +26,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ManagementFeeMapServiceImpl implements ManagementFeeMapService {
 
-    private final ManagementFeeRawRepository rawRepository;
+    private final ManagementFeeRepository rawRepository;
     private final ManagementFeeMapRepository mapRepository;
     private final MasterBankRepository masterBankRepository;
     private final DebitAccountProductRepository debitRepository;

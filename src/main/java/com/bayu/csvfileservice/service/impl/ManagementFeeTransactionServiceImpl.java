@@ -33,7 +33,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ManagementFeeTransactionServiceImpl implements ManagementFeeTransactionService {
 
-    private final ManagementFeeRawRepository rawRepository;
+    private final ManagementFeeRepository rawRepository;
     private final ManagementFeeMapRepository mapRepository;
     private final MasterBankRepository masterBankRepository;
     private final DebitAccountProductRepository debitRepository;

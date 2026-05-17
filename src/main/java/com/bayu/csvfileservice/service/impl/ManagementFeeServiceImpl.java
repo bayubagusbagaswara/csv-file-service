@@ -15,7 +15,7 @@ import com.bayu.csvfileservice.model.DataChange;
 import com.bayu.csvfileservice.model.ManagementFee;
 import com.bayu.csvfileservice.model.enumerator.ApprovalStatus;
 import com.bayu.csvfileservice.model.enumerator.Month;
-import com.bayu.csvfileservice.repository.ManagementFeeRawRepository;
+import com.bayu.csvfileservice.repository.ManagementFeeRepository;
 import com.bayu.csvfileservice.service.DataChangeService;
 import com.bayu.csvfileservice.service.ManagementFeeService;
 import com.bayu.csvfileservice.util.JsonHelper;
@@ -39,7 +39,7 @@ public class ManagementFeeServiceImpl implements ManagementFeeService {
 
     private static final String DATA_CHANGE_ID_FIELD = "dataChangeId";
 
-    private final ManagementFeeRawRepository managementFeeRawRepository;
+    private final ManagementFeeRepository managementFeeRepository;
     private final ValidationData validationData;
     private final DataChangeMapper dataChangeMapper;
     private final DataChangeService dataChangeService;
@@ -80,7 +80,7 @@ public class ManagementFeeServiceImpl implements ManagementFeeService {
             Integer year = ym.getYear();
 
             // Check unique data
-            if (managementFeeRawRepository.existsByFundCodeAndMonthAndYear(
+            if (managementFeeRepository.existsByFundCodeAndMonthAndYear(
                     afterPayload.getFundCode(), month, year)) {
                 List<String> errors = new ArrayList<>();
                 errors.add(String.format("Data already exists for the same fund %s, month %s, year %d",
@@ -121,7 +121,7 @@ public class ManagementFeeServiceImpl implements ManagementFeeService {
 
             // Set Approval fields ke entity
             setApprovalFields(managementFee, dataChange, userId, clientIp, now);
-            managementFeeRawRepository.save(managementFee);
+            managementFeeRepository.save(managementFee);
 
             // Update Data Change dengan ID yang sudah dibuat
             setApprovalFieldsToDataChange(dataChange, userId, clientIp, managementFee.getId(), now);
@@ -149,7 +149,7 @@ public class ManagementFeeServiceImpl implements ManagementFeeService {
 
     @Override
     public List<ManagementFee> getAll() {
-        return managementFeeRawRepository.findAll();
+        return managementFeeRepository.findAll();
     }
 
     @Override
@@ -158,7 +158,7 @@ public class ManagementFeeServiceImpl implements ManagementFeeService {
         ProcessResult processResult = new ProcessResult();
         try {
             // 1. Get entity
-            ManagementFee entity = managementFeeRawRepository.findById(id)
+            ManagementFee entity = managementFeeRepository.findById(id)
                     .orElseThrow(() -> new DataNotFoundException("ManagementFeeRaw not found with id: " + id));
 
             // 2. Map to ManagementFeeDto
@@ -206,7 +206,7 @@ public class ManagementFeeServiceImpl implements ManagementFeeService {
                     : null;
 
             Optional<ManagementFee> optional = entityId != null
-                    ? managementFeeRawRepository.findById(entityId)
+                    ? managementFeeRepository.findById(entityId)
                     : Optional.empty();
 
             if (optional.isPresent()) {
@@ -216,7 +216,7 @@ public class ManagementFeeServiceImpl implements ManagementFeeService {
                 setApprovalFieldsToDataChange(dataChange, userId, clientIp, entity.getId(), now);
 
                 // Delete data
-                managementFeeRawRepository.delete(entity);
+                managementFeeRepository.delete(entity);
 
                 // Update audit json: jsonAfter tetap null untuk DELETE operation
                 dataChange.setJsonDataAfter(null);
@@ -275,7 +275,7 @@ public class ManagementFeeServiceImpl implements ManagementFeeService {
         Month month = Month.valueOf(ym.getMonth().name());
         Integer year = ym.getYear();
 
-        if (managementFeeRawRepository.existsByFundCodeAndMonthAndYear(request.getFundCode(), month, year)) {
+        if (managementFeeRepository.existsByFundCodeAndMonthAndYear(request.getFundCode(), month, year)) {
             errors.add(String.format("Data already exists for the same fundCode %s, month %s, year %d",
                     request.getFundCode(), month.getLabel(), year));
 
