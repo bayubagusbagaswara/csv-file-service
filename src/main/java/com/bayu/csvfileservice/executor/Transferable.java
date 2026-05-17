@@ -27,4 +27,12 @@ public interface Transferable {
 
     FeatureType getFeatureType();
 
+    String getBiCode();
+
+    String getBranchCode();
+
+    String getBulkReferenceId();
+
+    String getSiReferenceId();
+
 }
