@@ -70,6 +70,8 @@ public class ManagementFeeMap extends BaseApproval implements Transferable {
 
     private String referenceId;
 
+    private String inquiryReferenceId;
+
     private Integer retryCount;
 
     private LocalDateTime lastSentDate;
