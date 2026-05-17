@@ -4,9 +4,11 @@ import com.bayu.csvfileservice.dto.ApiResponse;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.transaction.CreateSingleTransactionRequest;
 import com.bayu.csvfileservice.dto.transaction.SendTransactionRequest;
+import com.bayu.csvfileservice.model.enumerator.TransferMethod;
 import com.bayu.csvfileservice.service.ManagementFeeTransactionService;
 import com.bayu.csvfileservice.util.ApiResponseBuilder;
 import com.bayu.csvfileservice.util.ClientIpUtil;
+import com.bayu.csvfileservice.util.EnumConverter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,11 +30,15 @@ public class ManagementFeeTransactionController {
 
     @PostMapping("/create")
     public ResponseEntity<ApiResponse<ProcessResult>> create(
-            @RequestBody List<CreateSingleTransactionRequest> requests,
+            @RequestBody CreateSingleTransactionRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
-        ProcessResult result = managementFeeTransactionService.create(requests, clientIp);
+        String userId = request.getInputId();
+        Long id = request.getId();
+        TransferMethod transferMethod = EnumConverter.fromTransferMethod(request.getTransferMethod());
+        String description = request.getDescription();
+        ProcessResult result = managementFeeTransactionService.create(id, transferMethod, description, userId, clientIp);
         return ApiResponseBuilder.success(result);
     }
 
