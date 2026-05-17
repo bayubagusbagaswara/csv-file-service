@@ -1,11 +1,11 @@
 package com.bayu.csvfileservice.service.impl;
 
-import com.bayu.csvfileservice.dto.ApproveDataChangeRequest;
-import com.bayu.csvfileservice.dto.DeleteIdRequest;
 import com.bayu.csvfileservice.dto.ErrorDetail;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.datachange.DataChangeDto;
-import com.bayu.csvfileservice.dto.managementfee.*;
+import com.bayu.csvfileservice.dto.managementfee.ManagementFeeBulkRequest;
+import com.bayu.csvfileservice.dto.managementfee.ManagementFeeDto;
+import com.bayu.csvfileservice.dto.managementfee.ManagementFeeRequest;
 import com.bayu.csvfileservice.exception.DataNotFoundException;
 import com.bayu.csvfileservice.exception.InvalidFormatException;
 import com.bayu.csvfileservice.mapper.DataChangeHelperMapper;
@@ -64,12 +64,12 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
 
     @Override
     @Transactional
-    public ProcessResult createApprove(ApproveDataChangeRequest request, String clientIp) {
+    public ProcessResult approveCreate(Long dataChangeId, String userId, String clientIp) {
         LocalDateTime now = LocalDateTime.now();
         ProcessResult processResult = new ProcessResult();
         try {
             // Get Data Change - pastikan status PENDING
-            DataChange dataChange = dataChangeService.getPendingById(request.getDataChangeId());
+            DataChange dataChange = dataChangeService.getPendingById(dataChangeId);
 
             // Parse JSON After - Untuk ADD operation, jsonAfter TIDAK mengandung id, month, year
             ManagementFeeDto afterPayload = jsonHelper.fromJson(dataChange.getJsonDataAfter(), ManagementFeeDto.class);
@@ -92,7 +92,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                                 errors
                         )
                 );
-                setApprovalFieldsToDataChange(dataChange, request, clientIp, null, now);
+                setApprovalFieldsToDataChange(dataChange, userId, clientIp, null, now);
                 dataChange.setDescription(String.format("DataChange recorded as REJECTED for duplicate fundCode %s, month %s, year %d",
                         afterPayload.getFundCode(), month.getLabel(), year));
                 dataChangeService.setApprovalStatusIsRejected(dataChange, errors);
@@ -120,11 +120,11 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                     .build();
 
             // Set Approval fields ke entity
-            setApprovalFields(managementFeeRaw, dataChange, request, clientIp, now);
+            setApprovalFields(managementFeeRaw, dataChange, userId, clientIp, now);
             managementFeeRawRepository.save(managementFeeRaw);
 
             // Update Data Change dengan ID yang sudah dibuat
-            setApprovalFieldsToDataChange(dataChange, request, clientIp, managementFeeRaw.getId(), now);
+            setApprovalFieldsToDataChange(dataChange, userId, clientIp, managementFeeRaw.getId(), now);
 
             // UPDATE: Simpan DTO lengkap (termasuk id, month, year) di jsonAfter setelah approve
             ManagementFeeDto completeDto = managementFeeMapper.toDto(managementFeeRaw);
@@ -135,11 +135,11 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
             processResult.addSuccess();
 
         } catch (Exception e) {
-            log.error("Error approve management fee for dataChangeId {}", request.getDataChangeId(), e);
+            log.error("Error approve management fee for dataChangeId {}", dataChangeId, e);
             processResult.addError(
                     ErrorDetail.of(
                             DATA_CHANGE_ID_FIELD,
-                            String.valueOf(request.getDataChangeId()),
+                            String.valueOf(dataChangeId),
                             List.of("Failed to approve data: " + e.getMessage())
                     )
             );
@@ -154,11 +154,9 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
 
     @Override
     @Transactional
-    public ProcessResult deleteById(DeleteIdRequest request, DataChangeDto dataChangeDto) {
+    public ProcessResult deleteById(Long id, DataChangeDto dataChangeDto) {
         ProcessResult processResult = new ProcessResult();
         try {
-            Long id = request.getId();
-
             // 1. Get entity
             ManagementFeeRaw entity = managementFeeRawRepository.findById(id)
                     .orElseThrow(() -> new DataNotFoundException("ManagementFeeRaw not found with id: " + id));
@@ -177,17 +175,15 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
             //todo: kenapa entityId disini nilainya string kosong ya jika sudah disimpan ke database? padahal log nya ada id nya
             log.info("id: {}", id);
 
-            log.info("Datachange: {}", dataChange);
-
             // 6. Create delete action
             dataChangeService.createChangeActionDelete(dataChange, ManagementFeeRaw.class);
 
             processResult.addSuccess();
 
         } catch (Exception e) {
-            log.error("Error deleteById id {}", request.getId(), e);
+            log.error("Error deleteById id {}", id, e);
             processResult.addError(
-                    ErrorDetail.of("id", String.valueOf(request.getId()), List.of(e.getMessage()))
+                    ErrorDetail.of("id", String.valueOf(id), List.of(e.getMessage()))
             );
         }
         return processResult;
@@ -195,12 +191,11 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
 
     @Override
     @Transactional
-    public ProcessResult deleteApprove(ApproveDataChangeRequest request, String clientIp) {
+    public ProcessResult approveDelete(Long dataChangeId, String userId, String clientIp) {
         ProcessResult processResult = new ProcessResult();
         LocalDateTime now = LocalDateTime.now();
-        try {
-            Long dataChangeId = request.getDataChangeId();
 
+        try {
             // 1. Get DataChange + VALIDASI PENDING
             DataChange dataChange = dataChangeService.getPendingById(dataChangeId);
 
@@ -218,7 +213,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
                 ManagementFeeRaw entity = optional.get();
 
                 // Set approval ke dataChange
-                setApprovalFieldsToDataChange(dataChange, request, clientIp, entity.getId(), now);
+                setApprovalFieldsToDataChange(dataChange, userId, clientIp, entity.getId(), now);
 
                 // Delete data
                 managementFeeRawRepository.delete(entity);
@@ -231,7 +226,7 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
 
             } else {
                 // Data not found
-                setApprovalFieldsToDataChange(dataChange, request, clientIp, null, now);
+                setApprovalFieldsToDataChange(dataChange, userId, clientIp, null, now);
                 dataChangeService.setApprovalStatusIsRejected(
                         dataChange,
                         List.of("Management Fee not found")
@@ -246,15 +241,16 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
             }
 
         } catch (Exception e) {
-            log.error("Error deleteApprove dataChangeId {}", request.getDataChangeId(), e);
+            log.error("Error deleteApprove dataChangeId {}", dataChangeId, e);
             processResult.addError(
                     ErrorDetail.of(
-                            "dataChangeId",
-                            String.valueOf(request.getDataChangeId()),
+                            DATA_CHANGE_ID_FIELD,
+                            String.valueOf(dataChangeId),
                             List.of("Failed to approve delete: " + e.getMessage())
                     )
             );
         }
+
         return processResult;
     }
 
@@ -326,12 +322,12 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
 
     private void setApprovalFieldsToDataChange(
             DataChange dataChange,
-            ApproveDataChangeRequest request,
+            String userId,
             String clientIp,
             Long id,
             LocalDateTime now
     ) {
-        dataChange.setApproveId(request.getApproveId());
+        dataChange.setApproveId(userId);
         dataChange.setApproveDate(now);
         dataChange.setApproveIpAddress(clientIp);
         dataChange.setEntityId(String.valueOf(id));
@@ -340,12 +336,12 @@ public class ManagementFeeRawServiceImpl implements ManagementFeeRawService {
     private void setApprovalFields(
             ManagementFeeRaw entity,
             DataChange dataChange,
-            ApproveDataChangeRequest request,
+            String userId,
             String clientIp,
             LocalDateTime now
     ) {
         entity.setApprovalStatus(ApprovalStatus.APPROVED);
-        entity.setApproveId(request.getApproveId());
+        entity.setApproveId(userId);
         entity.setApproveIpAddress(clientIp);
         entity.setApproveDate(now);
         entity.setInputId(dataChange.getInputId());
