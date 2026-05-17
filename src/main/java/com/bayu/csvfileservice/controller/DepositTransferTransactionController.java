@@ -3,6 +3,9 @@ package com.bayu.csvfileservice.controller;
 import com.bayu.csvfileservice.dto.ApiResponse;
 import com.bayu.csvfileservice.dto.ProcessResult;
 import com.bayu.csvfileservice.dto.deposittransfer.transaction.*;
+import com.bayu.csvfileservice.dto.transaction.CreateBulkTransactionRequest;
+import com.bayu.csvfileservice.dto.transaction.CreateSingleTransactionRequest;
+import com.bayu.csvfileservice.dto.transaction.SendTransactionRequest;
 import com.bayu.csvfileservice.model.enumerator.ProcessType;
 import com.bayu.csvfileservice.model.enumerator.TransferMethod;
 import com.bayu.csvfileservice.service.DepositTransferTransactionService;
@@ -31,7 +34,7 @@ public class DepositTransferTransactionController {
 
     @PostMapping("/single")
     public ResponseEntity<ApiResponse<ProcessResult>> createSingle(
-            @RequestBody CreateSingleDepositTransferTransactionRequest request,
+            @RequestBody CreateSingleTransactionRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
@@ -45,7 +48,7 @@ public class DepositTransferTransactionController {
 
     @PostMapping("/bulk")
     public ResponseEntity<ApiResponse<ProcessResult>> createBulk(
-            @RequestBody CreateBulkDepositTransferTransactionRequest request,
+            @RequestBody CreateBulkTransactionRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
@@ -59,7 +62,7 @@ public class DepositTransferTransactionController {
 
     @PostMapping("/send")
     public ResponseEntity<ApiResponse<ProcessResult>> send(
-            @RequestBody SendDepositTransferTransactionRequest request,
+            @RequestBody SendTransactionRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
