@@ -1,16 +1,16 @@
 package com.bayu.csvfileservice.service;
 
 import com.bayu.csvfileservice.dto.ProcessResult;
-import com.bayu.csvfileservice.dto.transaction.CreateSingleTransactionRequest;
+import com.bayu.csvfileservice.model.enumerator.TransferMethod;
 
 import java.util.List;
 
 public interface ManagementFeeTransactionService {
 
-    ProcessResult create(List<CreateSingleTransactionRequest> requests, String clientIp);
+    ProcessResult create(Long id, TransferMethod transferMethod, String description, String userId, String clientIp);
 
     ProcessResult send(List<Long> ids, String userId, String clientIp);
 
+    ProcessResult reject(List<Long> ids, String userId, String clientIp);
 
-    // reject transaction
 }
