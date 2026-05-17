@@ -232,7 +232,6 @@ public class DepositTransferTransactionServiceImpl implements DepositTransferTra
         // 4. Loop setiap id yang dikirim user.
         for (Long id : ids) {
             DepositTransferTransaction transaction = transactionMap.get(id);
-
             try {
                 // 5. Validasi transaksi harus ditemukan.
                 if (transaction == null) {
@@ -326,7 +325,7 @@ public class DepositTransferTransactionServiceImpl implements DepositTransferTra
         LocalDateTime now = LocalDateTime.now();
         ProcessResult processResult = new ProcessResult();
 
-        // 1. Validasi list id transaksi.
+        // 1. Validasi list id transaction tidak boleh kosong.
         if (ids == null || ids.isEmpty()) {
             processResult.addError(
                     ErrorDetail.of(
@@ -338,47 +337,56 @@ public class DepositTransferTransactionServiceImpl implements DepositTransferTra
             return processResult;
         }
 
-        // 2. Ambil semua transaction berdasarkan ids.
-        List<DepositTransferTransaction> transactions =
-                depositTransferTransactionRepository.findAllById(ids);
+        // 2. Ambil semua DepositTransferTransaction berdasarkan list id.
+        List<DepositTransferTransaction> transactions = depositTransferTransactionRepository.findAllById(ids);
 
-        // 3. Convert list menjadi map agar mudah cek data yang tidak ditemukan.
+        // 3. Convert hasil query menjadi Map agar mudah cek transaction yang tidak ditemukan.
         Map<Long, DepositTransferTransaction> transactionMap = new HashMap<>();
 
         for (DepositTransferTransaction transaction : transactions) {
             transactionMap.put(transaction.getId(), transaction);
         }
 
-        // 4. Loop setiap id request.
+        // 4. Loop berdasarkan ids dari request agar setiap id tetap diproses satu per satu.
         for (Long id : ids) {
             DepositTransferTransaction transaction = transactionMap.get(id);
-
             try {
-                // 5. Validasi transaksi harus ditemukan.
+                // 5. Validasi transaction harus ditemukan.
                 if (transaction == null) {
                     throw new DataNotFoundException(
                             "DepositTransferTransaction not found with id: " + id
                     );
                 }
 
-                // 6. Validasi transaksi boleh direject.
+                // 6. Validasi transaction boleh direject.
                 // Hanya approvalStatus PENDING dan transactionStatus READY yang boleh direject.
                 validateRejectCandidate(transaction);
 
-                // 7. Set approvalStatus menjadi REJECTED.
+                // 7. Set transaction menjadi REJECTED.
+                // Record transaction tetap disimpan sebagai audit history.
                 transaction.setApprovalStatus(ApprovalStatus.REJECTED);
                 transaction.setApproveId(userId);
                 transaction.setApproveDate(now);
                 transaction.setApproveIpAddress(clientIp);
 
-                // 8. Simpan hasil reject.
                 depositTransferTransactionRepository.save(transaction);
 
-                // 9. Tambahkan success ke ProcessResult.
+                // 8. Ambil semua detail DepositTransferMap yang terhubung ke transaction ini.
+                // SINGLE biasanya 1 detail, BULK bisa lebih dari 1 detail.
+                List<DepositTransferMap> details = depositTransferMapRepository.findAllByTransactionId(transaction.getId());
+
+                // 9. Lepaskan detail dari transaction agar bisa dibuat transaction ulang.
+                for (DepositTransferMap detail : details) {
+                    detail.setTransactionId(null);
+                    detail.setBulkReferenceId(null);
+                    detail.setMappingStatus(MappingStatus.DRAFT);
+                    depositTransferMapRepository.save(detail);
+                }
+
+                // 10. Tambahkan success.
                 processResult.addSuccess();
 
             } catch (Exception e) {
-                // 10. Jika gagal reject, catat log error dan masukkan error ke ProcessResult.
                 log.error("Failed to reject Deposit Transfer transaction. transactionId={}, userId={}", id, userId, e);
                 processResult.addError(
                         ErrorDetail.of(
@@ -389,6 +397,7 @@ public class DepositTransferTransactionServiceImpl implements DepositTransferTra
                 );
             }
         }
+
         return processResult;
     }
 
@@ -503,7 +512,7 @@ public class DepositTransferTransactionServiceImpl implements DepositTransferTra
                 .date(reference.getDate())
 
                 .siReferenceId(null)
-                .referenceNo(null)
+                .referenceNo(reference.getReferenceNo())
 
                 .accountDebitNo(reference.getAccountDebitNo())
                 .productCode(reference.getProductCode())
@@ -670,9 +679,7 @@ public class DepositTransferTransactionServiceImpl implements DepositTransferTra
     }
 
     private static void validateSendCandidate(DepositTransferTransaction transaction) {
-
         validateSendStatus(transaction.getTransactionStatus());
-
         if (!ApprovalStatus.PENDING.equals(transaction.getApprovalStatus())) {
             throw new IllegalStateException(
                     "Only PENDING transaction can be sent. Current approvalStatus: "
@@ -682,7 +689,6 @@ public class DepositTransferTransactionServiceImpl implements DepositTransferTra
     }
 
     private static void validateRejectCandidate(DepositTransferTransaction transaction) {
-
         if (!ApprovalStatus.PENDING.equals(transaction.getApprovalStatus())) {
             throw new IllegalStateException(
                     "Only PENDING transaction can be rejected. Current approvalStatus: "
@@ -701,7 +707,6 @@ public class DepositTransferTransactionServiceImpl implements DepositTransferTra
     // =========================================================
     // RESPONSE HANDLER
     // =========================================================
-
     private void applyResponseStatus(
             DepositTransferTransaction transaction,
             NcbsResponse response
