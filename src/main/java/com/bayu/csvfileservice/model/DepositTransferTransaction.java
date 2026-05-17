@@ -118,6 +118,8 @@ public class DepositTransferTransaction extends BaseApproval {
     private TransactionStatus transactionStatus;
 
     // ============= referenceId for Middleware unique id, auto generate by system =============
+    @Column(name = "inquiry_reference_id")
+    private String inquiryReferenceId;
     @Column(name = "reference_id")
     private String referenceId;
 
