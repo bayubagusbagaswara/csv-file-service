@@ -2341,3 +2341,97 @@ BULK:
 
 ```
 
+# Flow Create Single Transaction
+
+```bash
+Create single transaction:
+1. DepositTransferMap harus berstatus DRAFT
+2. DepositTransferMap belum boleh memiliki transactionId
+3. TransferMethod divalidasi berdasarkan TransferScope
+   - INTERNAL hanya boleh OVERBOOKING
+   - EXTERNAL hanya boleh BI-FAST, SKN, atau RTGS
+4. Sistem membuat 1 DepositTransferTransaction dari 1 DepositTransferMap
+5. DepositTransferTransaction di-set:
+   - processType = SINGLE
+   - transactionStatus = READY
+   - approvalStatus = PENDING
+   - totalAmount = principle dari DepositTransferMap
+   - siReferenceId = siReferenceId dari DepositTransferMap
+6. DepositTransferMap di-update:
+   - transactionId = id DepositTransferTransaction
+   - bulkReferenceId = null
+7. Data transaction siap untuk proses sendTransaction atau rejectTransaction
+```
+
+# Flow Create Bulk Transaction
+
+```bash
+Create bulk transaction:
+1. Semua DepositTransferMap harus berstatus DRAFT
+2. Semua DepositTransferMap belum boleh memiliki transactionId
+3. Semua data bulk harus memenuhi syarat konsistensi, misalnya:
+   - fundCode sama
+   - fundName sama
+   - cashAccountNo sama
+   - bankCode sama
+   - currency sama
+   - transferScope sama
+4. TransferMethod divalidasi berdasarkan TransferScope
+   - INTERNAL hanya boleh OVERBOOKING
+   - EXTERNAL hanya boleh BI-FAST, SKN, atau RTGS
+5. Sistem generate bulkReferenceId
+6. Sistem menggabungkan semua siReferenceId ke bulkSiReferenceIds untuk informasi
+7. Sistem menjumlahkan semua principle menjadi totalAmount
+8. Sistem membuat 1 DepositTransferTransaction dari beberapa DepositTransferMap
+9. DepositTransferTransaction di-set:
+   - processType = BULK
+   - transactionStatus = READY
+   - approvalStatus = PENDING
+   - totalAmount = total principle dari semua detail
+   - siReferenceId = null
+   - bulkReferenceId = generated bulkReferenceId
+   - bulkSiReferenceIds = gabungan siReferenceId
+10. Semua DepositTransferMap terkait di-update:
+   - transactionId = id DepositTransferTransaction yang sama
+   - bulkReferenceId = bulkReferenceId yang sama
+11. Data transaction siap untuk proses sendTransaction atau rejectTransaction
+```
+
+# Flow Send Transaction
+
+```bash
+Send transaction:
+1. Transaction harus approvalStatus = PENDING
+2. Transaction harus transactionStatus = READY atau RETRY
+3. Transaction di-set transactionStatus = SENT sebelum call middleware
+4. Sistem set lastSentDate = waktu saat ini
+5. Sistem menaikkan retryCount
+   - jika null, menjadi 1
+   - jika sudah ada, ditambah 1
+6. Sistem membuat TransferableAdapter dari DepositTransferTransaction
+7. Sistem mengirim transaksi ke middleware melalui TransferOrchestratorService
+8. TransferOrchestratorService memilih executor berdasarkan TransferMethod
+   - OVERBOOKING → OverbookingExecutor
+   - BI-FAST → BiFastExecutor
+   - SKN/RTGS → SknRtgsExecutor
+9. Sistem menerima NcbsResponse dari middleware
+10. Sistem menyimpan referenceId dari response ke DepositTransferTransaction
+11. Sistem menentukan transactionStatus akhir berdasarkan responseCode:
+   - sukses → SUCCESS
+   - saldo kurang → RETRY
+   - error lain → FAILED
+12. Sistem set approvalStatus = APPROVED
+13. Sistem mengisi approveId, approveDate, approveIpAddress
+14. Transaction selesai diproses
+```
+
+# Flow Reject Transaction
+
+```bash
+Reject transaction:
+1. Transaction harus PENDING + READY
+2. Transaction di-set approvalStatus = REJECTED
+3. Detail DepositTransferMap dilepas dari transaction
+4. Detail kembali menjadi DRAFT
+5. Detail bisa dipakai lagi untuk createSingle / createBulk
+```
