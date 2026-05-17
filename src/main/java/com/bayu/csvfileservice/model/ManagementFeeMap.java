@@ -88,4 +88,14 @@ public class ManagementFeeMap extends BaseApproval implements Transferable {
         return FeatureType.MANAGEMENT_FEE;
     }
 
+    @Override
+    public String getBulkReferenceId() {
+        return "";
+    }
+
+    @Override
+    public String getSiReferenceId() {
+        return "";
+    }
+
 }
