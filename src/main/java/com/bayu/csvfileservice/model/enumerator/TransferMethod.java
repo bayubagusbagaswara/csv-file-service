@@ -8,9 +8,7 @@ public enum TransferMethod {
     BI_FAST("BI-FAST"),
     SKN("SKN"),
     RTGS("RTGS"),
-    OVERBOOKING_CASA_TO_CASA("OVERBOOKING_CASA_TO_CASA"),
-    OVERBOOKING_CASA_TO_GL("OVERBOOKING_CASA_TO_GL")
-    ;
+    OVERBOOKING("OVERBOOKING");
 
     private final String name;
 
