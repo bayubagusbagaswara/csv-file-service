@@ -2,6 +2,7 @@ package com.bayu.csvfileservice.executor;
 
 import com.bayu.csvfileservice.model.DepositTransferTransaction;
 import com.bayu.csvfileservice.model.ManagementFeeMap;
+import com.bayu.csvfileservice.model.TaxBrokerFeeMap;
 import com.bayu.csvfileservice.model.enumerator.FeatureType;
 import com.bayu.csvfileservice.model.enumerator.ProcessType;
 import lombok.extern.slf4j.Slf4j;
@@ -67,6 +68,33 @@ public class TransferableMapper {
                 .build();
 
         log.info("TransferableMapper fromDepositTransferTransaction: {}", adapter);
+
+        return adapter;
+    }
+
+    public Transferable fromTaxBrokerFeeMap(TaxBrokerFeeMap e) {
+
+        TransferableAdapter adapter = TransferableAdapter.builder()
+                .id(e.getId())
+                .transferMethod(e.getTransferMethod())
+                .transferScope(e.getTransferScope())
+                .featureType(e.getFeatureType())
+                .processType(e.getProcessType())
+                .mappingStatus(e.getMappingStatus())
+
+                .debitAccount(e.getDebitAccount())
+                .creditAccount(e.getCreditAccount())
+                .amount(e.getAmount())
+                .description(e.getDescription())
+
+                .biCode(e.getBiCode())
+                .branchCode(null)
+
+                .siReferenceId(e.getReferenceCombination())
+                .bulkReferenceId(null)
+                .build();
+
+        log.info("TransferableMapper fromTaxBrokerFeeMap: {}", adapter);
 
         return adapter;
     }
