@@ -10,4 +10,6 @@ public interface TaxBrokerFeeRepository extends JpaRepository<TaxBrokerFee, Long
 
     List<TaxBrokerFee> findAllByDate(LocalDate date);
 
+    boolean existsByReferenceCombination(String referenceCombination);
+
 }

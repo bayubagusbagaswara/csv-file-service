@@ -4,9 +4,6 @@ import com.bayu.csvfileservice.dto.ApiResponse;
 import com.bayu.csvfileservice.dto.ApproveDataChangeRequest;
 import com.bayu.csvfileservice.dto.DeleteIdRequest;
 import com.bayu.csvfileservice.dto.ProcessResult;
-import com.bayu.csvfileservice.dto.datachange.DataChangeDto;
-import com.bayu.csvfileservice.dto.managementfee.ManagementFeeBulkRequest;
-import com.bayu.csvfileservice.model.ManagementFee;
 import com.bayu.csvfileservice.service.ManagementFeeService;
 import com.bayu.csvfileservice.util.ApiResponseBuilder;
 import com.bayu.csvfileservice.util.ClientIpUtil;
@@ -18,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -33,70 +31,74 @@ public class TaxBrokerFeeController {
     private final ManagementFeeService managementFeeService;
     private final DataChangeFactory dataChangeFactory;
 
-    @PostMapping(path = "/upload")
+    private final TaxBrokerFeeService taxBrokerFeeService;
+
+    @PostMapping("/upload")
     public ResponseEntity<ApiResponse<ProcessResult>> upload(
-            @RequestBody ManagementFeeBulkRequest request,
+            @RequestBody TaxBrokerFeeBulkRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
-        String userId = request.getInputId();
-        DataChangeDto dataChangeDto = dataChangeFactory.build(
-                userId,
-                clientIp,
-                "POST",
-                BASE_URL + "/create/approve",
-                MENU_NAME
+
+        ProcessResult result = taxBrokerFeeService.upload(
+                request,
+                clientIp
         );
-        ProcessResult result = managementFeeService.createBulk(request, dataChangeDto);
+
         return ApiResponseBuilder.success(result);
     }
 
-    @PostMapping(path = "/create/approve")
-    public ResponseEntity<ApiResponse<ProcessResult>> approveCreate(
+    @PostMapping("/create/approve")
+    public ResponseEntity<ApiResponse<ProcessResult>> createApprove(
             @RequestBody ApproveDataChangeRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
-        String userId = request.getApproveId();
-        Long dataChangeId = request.getDataChangeId();
-        ProcessResult result = managementFeeService.approveCreate(dataChangeId, userId, clientIp);
+
+        ProcessResult result = taxBrokerFeeService.createApprove(
+                request,
+                clientIp
+        );
+
         return ApiResponseBuilder.success(result);
     }
 
-    @GetMapping(path = "/all")
-    public ResponseEntity<ApiResponse<List<ManagementFee>>> getAll() {
-        List<ManagementFee> list = managementFeeService.getAll();
-        return ApiResponseBuilder.success(list);
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<ProcessResult>> deleteById(
-            @PathVariable("id") Long id,
+    @PostMapping("/delete")
+    public ResponseEntity<ApiResponse<ProcessResult>> delete(
             @RequestBody DeleteIdRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
-        String userId = request.getInputId();
-        DataChangeDto dataChangeDto = dataChangeFactory.build(
-                userId,
-                clientIp,
-                "DELETE",
-                BASE_URL + "/delete/approve",
-                MENU_NAME
+
+        ProcessResult result = taxBrokerFeeService.deleteById(
+                request,
+                clientIp
         );
-        ProcessResult result = managementFeeService.deleteById(id, dataChangeDto);
+
         return ApiResponseBuilder.success(result);
     }
 
-    @DeleteMapping(path = "/delete/approve")
+    @PostMapping("/delete/approve")
     public ResponseEntity<ApiResponse<ProcessResult>> deleteApprove(
             @RequestBody ApproveDataChangeRequest request,
             HttpServletRequest servletRequest
     ) {
         String clientIp = ClientIpUtil.getClientIp(servletRequest);
-        String userId = request.getApproveId();
-        Long dataChangeId = request.getDataChangeId();
-        ProcessResult result = managementFeeService.approveDelete(dataChangeId, userId, clientIp);
+
+        ProcessResult result = taxBrokerFeeService.deleteApprove(
+                request,
+                clientIp
+        );
+
+        return ApiResponseBuilder.success(result);
+    }
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<TaxBrokerFeeDto>>> getAllByDate(
+            @RequestParam LocalDate date
+    ) {
+        List<TaxBrokerFeeDto> result = taxBrokerFeeService.getAllByDate(date);
+
         return ApiResponseBuilder.success(result);
     }
 }
