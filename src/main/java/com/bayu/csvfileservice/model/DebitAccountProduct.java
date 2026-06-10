@@ -1,18 +1,17 @@
 package com.bayu.csvfileservice.model;
 
+import com.bayu.csvfileservice.model.base.BaseApproval;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "debit_account_product")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class DebitAccountProduct {
+public class DebitAccountProduct extends BaseApproval {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
