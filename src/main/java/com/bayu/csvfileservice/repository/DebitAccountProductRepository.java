@@ -8,4 +8,9 @@ import java.util.Optional;
 public interface DebitAccountProductRepository extends JpaRepository<DebitAccountProduct, Long> {
 
     Optional<DebitAccountProduct> findByFundCode(String fundCode);
+
+    Optional<DebitAccountProduct> findByProductCode(String productCode);
+
+    boolean existsByProductCode(String productCode);
+
 }
